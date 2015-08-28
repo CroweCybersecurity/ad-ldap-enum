@@ -9,7 +9,7 @@
 
 import sys
 import ldap
-import time
+import datetime
 import logging
 import argparse
 
@@ -124,36 +124,36 @@ def ldap_queries(ldap_client, base_dn):
     computer_attributes = ['distinguishedName', 'sAMAccountName', 'primaryGroupID']
 
     # LDAP queries
-    logging.info('Querying users.')
+    logging.info('Querying users')
     users = query_ldap_with_paging(ldap_client, base_dn, user_filter, user_attributes, ADUser)
-    logging.info('Querying groups.')
+    logging.info('Querying groups')
     groups = query_ldap_with_paging(ldap_client, base_dn, group_filter, group_attributes, ADGroup)
-    logging.info('Querying computers.')
+    logging.info('Querying computers')
     computers = query_ldap_with_paging(ldap_client, base_dn, computer_filters, computer_attributes, ADComputer)
 
     # LDAP dictionaries
-    logging.info('Building users dictionary.')
+    logging.info('Building users dictionary')
     for element in users:
         users_dictionary[element.distinguished_name] = element
 
-    logging.info('Building groups dictionary.')
+    logging.info('Building groups dictionary')
     for element in groups:
         group_id_to_dn_dictionary[element.primary_group_token] = element.distinguished_name
         groups_dictionary[element.distinguished_name] = element
 
-    logging.info('Building computers dictionary.')
+    logging.info('Building computers dictionary')
     for element in computers:
         computers_dictionary[element.distinguished_name] = element
 
     # Loop through each group. If the membership is a range then query AD to get the full group membership
-    logging.info('Exploding large groups.')
+    logging.info('Exploding large groups')
     for group_key, group_object in groups_dictionary.iteritems():
         if group_object.is_large_group:
-            logging.debug('Getting full membership for group {0}.'.format(group_key))
+            logging.debug('Getting full membership for [%s]', group_key)
             groups_dictionary[group_key].members = get_membership_with_ranges(ldap_client, base_dn, group_key)
 
     # Build group membership
-    logging.info('Building group membership.')
+    logging.info('Building group membership')
 
     _output_dictionary = []
     cores = cpu_count()
@@ -280,7 +280,7 @@ def get_membership_with_ranges(ldap_client, base_dn, group_dn):
     return output_array
 
 if __name__ == '__main__':
-    start_time = time.time()
+    start_time = datetime.datetime.now()
 
     # Command line arguments
     parser = argparse.ArgumentParser(description="AD LDAP Enumeration")
@@ -323,7 +323,7 @@ if __name__ == '__main__':
     # Build the baseDN
     formatted_domain_name = args.domain.replace('.', ',dc=')
     base_dn = 'dc={0}'.format(formatted_domain_name)
-    logging.debug('Using BaseDN of {0}'.format(base_dn))
+    logging.debug('Using BaseDN of [%s]', base_dn)
 
     # Query LDAP
     output = ldap_queries(ldap_client, base_dn)
@@ -331,4 +331,5 @@ if __name__ == '__main__':
 
     print output.getvalue()
 
-    logging.info('Elapsed Time Is {0} Minutes'.format((time.time() - start_time)/60))
+    end_time = datetime.datetime.now()
+    logging.info('Elapsed Time [%s]', end_time - start_time)
