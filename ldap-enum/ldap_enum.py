@@ -1,34 +1,22 @@
 ﻿#!/usr/bin/env python
 #
 # An LDAP replacement for NBTEnum. The script queries Active Directory over LDAP for users, groups and computers.
-# This information is correlated and output to the console showing groups and their membership.
+# This information is correlated and output to the console showing groups, their membership and other information.
 # The script supports null and authenticated Active Directory access.
 #
 # Author:: Eric DePree
 # Date::   2015
 
-import os
-import csv
 import sys
 import ldap
 import time
 import logging
 import argparse
-import datetime
 
-from collections import defaultdict
 from collections import deque
-
-try:
-    from cStringIO import StringIO
-except:
-    from StringIO import StringIO
-
-# 'Global' Variables
-users_dictionary = {}
-groups_dictionary = {}
-computers_dictionary = {}
-group_id_to_dn_dictionary = {}
+from functools import partial
+from cStringIO import StringIO
+from multiprocessing import Pool, cpu_count
 
 class ADUser:
     distinguished_name = ''
@@ -57,7 +45,7 @@ class ADUser:
         if 'displayName' in retrieved_attributes:
             self.display_name = retrieved_attributes['displayName'][0]
         if 'mail' in retrieved_attributes:
-            self.mail = retrieved_attributes['mail']
+            self.mail = retrieved_attributes['mail'][0]
         if 'pwdLastSet' in retrieved_attributes:
             self.password_last_set = retrieved_attributes['pwdLastSet'][0]
 
@@ -120,10 +108,10 @@ class ADGroup:
             self.is_large_group = True
 
 def ldap_queries(ldap_client, base_dn):
-    # Pull in global variables
-    global users_dictionary
-    global groups_dictionary
-    global computers_dictionary
+    users_dictionary = {}
+    groups_dictionary = {}
+    computers_dictionary = {}
+    group_id_to_dn_dictionary = {}
 
     # LDAP filters
     user_filter = '(objectcategory=user)'
@@ -150,6 +138,7 @@ def ldap_queries(ldap_client, base_dn):
 
     logging.info('Building groups dictionary.')
     for element in groups:
+        group_id_to_dn_dictionary[element.primary_group_token] = element.distinguished_name
         groups_dictionary[element.distinguished_name] = element
 
     logging.info('Building computers dictionary.')
@@ -167,12 +156,18 @@ def ldap_queries(ldap_client, base_dn):
     logging.info('Building group membership.')
 
     _output_dictionary = []
-    for group_distinguished_name in groups_dictionary:
-        logging.debug('Processing group {0}.'.format(group_distinguished_name))
-        temp_output_dictionary = process_group(group_distinguished_name, None, False)
+    cores = cpu_count()
+    dict_keys = groups_dictionary.keys()
+    func = partial(process_group, users_dictionary, groups_dictionary, computers_dictionary)
 
-        if temp_output_dictionary is not None:
-            _output_dictionary += temp_output_dictionary
+    pool = Pool(processes=cores)
+    pool_results = pool.map(func, dict_keys)
+    pool.close()
+    pool.join()
+
+    for result in pool_results:
+        if len(result) > 0:
+            _output_dictionary += result
 
     # Add users if they have the group set as their primary ID as the group
     for user_key, user_object in users_dictionary.iteritems():
@@ -184,6 +179,9 @@ def ldap_queries(ldap_client, base_dn):
             temp_list.append(user_object.sam_account_name)
             temp_list.append(user_object.get_account_flags())
             temp_list.append(user_object.display_name)
+            temp_list.append(user_object.mail)
+            temp_list.append(user_object.home_directory)
+            temp_list.append(user_object.comment)
             _output_dictionary.append(temp_list)
 
     # Add computers if they have the group set as their primary ID as the group
@@ -197,23 +195,16 @@ def ldap_queries(ldap_client, base_dn):
             _output_dictionary.append(temp_list)
 
     output_buffer = StringIO()
-    output_buffer.write('Group Name|User Name|Status|Name|Password Last Set\n')
+    output_buffer.write('Group Name|User Name|Status|Name|Email|Home Directory|User Comment|Password Last Set\n')
     for element in _output_dictionary:
         output_buffer.write('|'.join(element) + '\n')
 
     return output_buffer
 
-def process_group(group_distinguished_name, base_group_distinguished_name, explode_nested_groups):
-    # Pull in global variables
-    global users_dictionary
-    global groups_dictionary
-    global computers_dictionary
-    global group_id_to_dn_dictionary
-
+def process_group(users_dictionary, groups_dictionary, computers_dictionary, group_distinguished_name):
     # Store assorted group information.
     group_dictionary = []
     group_sam_name = groups_dictionary[group_distinguished_name].sam_account_name
-    group_id_to_dn_dictionary[groups_dictionary[group_distinguished_name].primary_group_token] = group_distinguished_name
 
     # Add users/groups/computer if they are a 'memberOf' the group
     for member in groups_dictionary[group_distinguished_name].members:
@@ -225,6 +216,9 @@ def process_group(group_distinguished_name, base_group_distinguished_name, explo
             temp_list.append(user_member.sam_account_name)
             temp_list.append(user_member.get_account_flags())
             temp_list.append(user_member.display_name)
+            temp_list.append(user_member.mail)
+            temp_list.append(user_member.home_directory)
+            temp_list.append(user_member.comment)
             group_dictionary.append(temp_list)
 
         elif member in computers_dictionary:
