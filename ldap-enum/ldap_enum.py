@@ -14,9 +14,7 @@ import logging
 import argparse
 
 from collections import deque
-from functools import partial
 from cStringIO import StringIO
-from multiprocessing import Pool, cpu_count
 
 class ADUser:
     distinguished_name = ''
@@ -156,19 +154,10 @@ def ldap_queries(ldap_client, base_dn):
     logging.info('Building group membership')
 
     _output_dictionary = []
-    cores = cpu_count()
-    dict_keys = groups_dictionary.keys()
-    func = partial(process_group, users_dictionary, groups_dictionary, computers_dictionary)
+    for grp in groups_dictionary.keys():
+        _output_dictionary += process_group(users_dictionary, groups_dictionary, computers_dictionary, grp)
 
-    pool = Pool(processes=cores)
-    pool_results = pool.map(func, dict_keys)
-    pool.close()
-    pool.join()
-
-    for result in pool_results:
-        if len(result) > 0:
-            _output_dictionary += result
-
+    # TODO: This could create output duplicates. It should be fixed at some point.
     # Add users if they have the group set as their primary ID as the group
     for user_key, user_object in users_dictionary.iteritems():
         if user_object.primary_group_id:
@@ -184,6 +173,7 @@ def ldap_queries(ldap_client, base_dn):
             temp_list.append(user_object.comment)
             _output_dictionary.append(temp_list)
 
+    # TODO: This could create output duplicates. It should be fixed at some point.
     # Add computers if they have the group set as their primary ID as the group
     for computer_key, computer_object in computers_dictionary.iteritems():
         if computer_object.primary_group_id:
