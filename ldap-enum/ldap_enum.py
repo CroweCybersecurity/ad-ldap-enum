@@ -1,11 +1,11 @@
 ﻿#!/usr/bin/env python
-#
-# An LDAP replacement for NBTEnum. The script queries Active Directory over LDAP for users, groups and computers.
-# This information is correlated and output to the console showing groups, their membership and other information.
-# The script supports null and authenticated Active Directory access.
-#
+
 # Author:: Eric DePree
 # Date::   2015
+
+"""An LDAP replacement for NBTEnum. The script queries Active Directory over LDAP for users, groups and computers.
+   This information is correlated and output to the console showing groups, their membership and other information.
+   The script supports null and authenticated Active Directory access."""
 
 import sys
 import ldap
@@ -16,7 +16,10 @@ import argparse
 from collections import deque
 from cStringIO import StringIO
 
-class ADUser:
+class ADUser(object):
+    """A representation of a user in Active Directory. Class variables are instantiated to a 'safe'
+       state so when the object is used during processing it can be assumed that all properties have
+       some sort of value."""
     distinguished_name = ''
     sam_account_name = ''
     user_account_control = ''
@@ -69,11 +72,15 @@ class ADUser:
 
         return _output_string
 
-    def get_password_last_set_date(self):
+    @staticmethod
+    def get_password_last_set_date():
         # Epoch time (AD/10000000)-11644473600
         None
 
-class ADComputer:
+class ADComputer(object):
+    """A representation of a computer in Active Directory. Class variables are instantiated to a 'safe'
+       state so when the object is used during processing it can be assumed that all properties have
+       some sort of value."""
     distinguished_name = ''
     sam_account_name = ''
     primary_group_id = ''
@@ -86,7 +93,10 @@ class ADComputer:
         if 'primaryGroupID' in retrieved_attributes:
             self.primary_group_id = retrieved_attributes['primaryGroupID'][0]
 
-class ADGroup:
+class ADGroup(object):
+    """A representation of a group in Active Directory. Class variables are instantiated to a 'safe'
+       state so when the object is used during processing it can be assumed that all properties have
+       some sort of value."""
     distinguished_name = ''
     sam_account_name = ''
     primary_group_token = ''
@@ -106,6 +116,7 @@ class ADGroup:
             self.is_large_group = True
 
 def ldap_queries(ldap_client, base_dn):
+    """Main worker class on the script. Does everything"""
     users_dictionary = {}
     groups_dictionary = {}
     computers_dictionary = {}
@@ -152,14 +163,20 @@ def ldap_queries(ldap_client, base_dn):
 
     # Build group membership
     logging.info('Building group membership')
+    logging.info('There is a total of [%i] groups', len(groups_dictionary.keys()))
 
+    current_group_number = 0
     _output_dictionary = []
     for grp in groups_dictionary.keys():
+        current_group_number += 1
         _output_dictionary += process_group(users_dictionary, groups_dictionary, computers_dictionary, grp)
+
+        if current_group_number % 1000 == 0:
+            logging.info('Processing group [%i]', current_group_number)
 
     # TODO: This could create output duplicates. It should be fixed at some point.
     # Add users if they have the group set as their primary ID as the group
-    for user_key, user_object in users_dictionary.iteritems():
+    for user_object in users_dictionary.values():
         if user_object.primary_group_id:
             grp_dn = group_id_to_dn_dictionary[user_object.primary_group_id]
 
@@ -175,7 +192,7 @@ def ldap_queries(ldap_client, base_dn):
 
     # TODO: This could create output duplicates. It should be fixed at some point.
     # Add computers if they have the group set as their primary ID as the group
-    for computer_key, computer_object in computers_dictionary.iteritems():
+    for computer_object in computers_dictionary.values():
         if computer_object.primary_group_id:
             grp_dn = group_id_to_dn_dictionary[computer_object.primary_group_id]
 
@@ -192,6 +209,7 @@ def ldap_queries(ldap_client, base_dn):
     return output_buffer
 
 def process_group(users_dictionary, groups_dictionary, computers_dictionary, group_distinguished_name):
+    """Builds group membership for a specified group."""
     # Store assorted group information.
     group_dictionary = []
     group_sam_name = groups_dictionary[group_distinguished_name].sam_account_name
@@ -222,8 +240,8 @@ def process_group(users_dictionary, groups_dictionary, computers_dictionary, gro
     return group_dictionary
 
 def query_ldap_with_paging(ldap_client, base_dn, search_filter, attributes, output_object=None, page_size=1000):
-    """Get all the AD results from LDAP using a paging approach.
-       By default AD will return 1,000 results per query before it errors out."""
+    """Get all the Active Directory results from LDAP using a paging approach.
+       By default Active Directory will return 1,000 results per query before it errors out."""
 
     # Method Variables
     more_pages = True
@@ -259,6 +277,9 @@ def query_ldap_with_paging(ldap_client, base_dn, search_filter, attributes, outp
     return output_array
 
 def get_membership_with_ranges(ldap_client, base_dn, group_dn):
+    """Queries the membership of an Active Directory group. For large groups Active Directory will
+       Not return the full membership by default but will instead return partial results. Additional
+       processing is needed to get the full membership."""
     output_array = []
 
     membership_filter = '(&(|(objectcategory=user)(objectcategory=group)(objectcategory=computer))(memberof={0}))'.format(group_dn)
