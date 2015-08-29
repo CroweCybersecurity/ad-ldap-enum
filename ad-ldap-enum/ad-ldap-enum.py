@@ -3,8 +3,8 @@
 # Author:: Eric DePree
 # Date::   2015
 
-"""An LDAP replacement for NBTEnum. The script queries Active Directory over LDAP for users, groups and computers.
-   This information is correlated and output to the console showing groups, their membership and other information.
+"""An LDAP Active Directory enumerator. The script queries Active Directory over LDAP for users, groups and computers.
+   This information is correlated and output to the console showing groups, their membership and other user information.
    The script supports null and authenticated Active Directory access."""
 
 import sys
@@ -116,7 +116,7 @@ class ADGroup(object):
             self.is_large_group = True
 
 def ldap_queries(ldap_client, base_dn):
-    """Main worker class on the script. Does everything"""
+    """Main worker function for the script."""
     users_dictionary = {}
     groups_dictionary = {}
     computers_dictionary = {}
@@ -294,7 +294,7 @@ if __name__ == '__main__':
     start_time = datetime.datetime.now()
 
     # Command line arguments
-    parser = argparse.ArgumentParser(description="AD LDAP Enumeration")
+    parser = argparse.ArgumentParser(description="Active Directory LDAP Enumerator")
     server_group = parser.add_argument_group('Server Parameters')
     server_group.add_argument('-l', dest='ldap_server', help='LDAP Server')
     server_group.add_argument('-d', dest='domain', help='Fully Qualified Domain Name')
