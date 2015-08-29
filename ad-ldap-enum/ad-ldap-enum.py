@@ -1,36 +1,25 @@
 ﻿#!/usr/bin/env python
-#
-# An LDAP replacement for NBTEnum. The script queries Active Directory over LDAP for users, groups and computers.
-# This information is correlated and output to the console showing groups and their membership.
-# The script supports null and authenticated Active Directory access.
-#
+
 # Author:: Eric DePree
 # Date::   2015
 
-import os
-import csv
+"""An LDAP Active Directory enumerator. The script queries Active Directory over LDAP for users, groups and computers.
+   This information is correlated and output to the console showing groups, their membership and other user information.
+   The script supports null and authenticated Active Directory access."""
+
 import sys
 import ldap
-import time
+import datetime
 import logging
 import argparse
-import datetime
 
-from collections import defaultdict
 from collections import deque
+from cStringIO import StringIO
 
-try:
-    from cStringIO import StringIO
-except:
-    from StringIO import StringIO
-
-# 'Global' Variables
-users_dictionary = {}
-groups_dictionary = {}
-computers_dictionary = {}
-group_id_to_dn_dictionary = {}
-
-class ADUser:
+class ADUser(object):
+    """A representation of a user in Active Directory. Class variables are instantiated to a 'safe'
+       state so when the object is used during processing it can be assumed that all properties have
+       some sort of value."""
     distinguished_name = ''
     sam_account_name = ''
     user_account_control = ''
@@ -57,7 +46,7 @@ class ADUser:
         if 'displayName' in retrieved_attributes:
             self.display_name = retrieved_attributes['displayName'][0]
         if 'mail' in retrieved_attributes:
-            self.mail = retrieved_attributes['mail']
+            self.mail = retrieved_attributes['mail'][0]
         if 'pwdLastSet' in retrieved_attributes:
             self.password_last_set = retrieved_attributes['pwdLastSet'][0]
 
@@ -84,10 +73,18 @@ class ADUser:
         return _output_string
 
     def get_password_last_set_date(self):
-        # Epoch time (AD/10000000)-11644473600
-        None
+        if (self.password_last_set != '') and (self.password_last_set != '0'):
+            last_set_int = int(self.password_last_set)
+            epoch_time = (last_set_int / 10000000) - 11644473600
+            last_set_time = datetime.datetime.fromtimestamp(epoch_time)
+            return last_set_time.strftime('%m-%d-%y %H:%M:%S')
 
-class ADComputer:
+        return self.password_last_set
+
+class ADComputer(object):
+    """A representation of a computer in Active Directory. Class variables are instantiated to a 'safe'
+       state so when the object is used during processing it can be assumed that all properties have
+       some sort of value."""
     distinguished_name = ''
     sam_account_name = ''
     primary_group_id = ''
@@ -100,7 +97,10 @@ class ADComputer:
         if 'primaryGroupID' in retrieved_attributes:
             self.primary_group_id = retrieved_attributes['primaryGroupID'][0]
 
-class ADGroup:
+class ADGroup(object):
+    """A representation of a group in Active Directory. Class variables are instantiated to a 'safe'
+       state so when the object is used during processing it can be assumed that all properties have
+       some sort of value."""
     distinguished_name = ''
     sam_account_name = ''
     primary_group_token = ''
@@ -120,10 +120,11 @@ class ADGroup:
             self.is_large_group = True
 
 def ldap_queries(ldap_client, base_dn):
-    # Pull in global variables
-    global users_dictionary
-    global groups_dictionary
-    global computers_dictionary
+    """Main worker function for the script."""
+    users_dictionary = {}
+    groups_dictionary = {}
+    computers_dictionary = {}
+    group_id_to_dn_dictionary = {}
 
     # LDAP filters
     user_filter = '(objectcategory=user)'
@@ -136,46 +137,50 @@ def ldap_queries(ldap_client, base_dn):
     computer_attributes = ['distinguishedName', 'sAMAccountName', 'primaryGroupID']
 
     # LDAP queries
-    logging.info('Querying users.')
+    logging.info('Querying users')
     users = query_ldap_with_paging(ldap_client, base_dn, user_filter, user_attributes, ADUser)
-    logging.info('Querying groups.')
+    logging.info('Querying groups')
     groups = query_ldap_with_paging(ldap_client, base_dn, group_filter, group_attributes, ADGroup)
-    logging.info('Querying computers.')
+    logging.info('Querying computers')
     computers = query_ldap_with_paging(ldap_client, base_dn, computer_filters, computer_attributes, ADComputer)
 
     # LDAP dictionaries
-    logging.info('Building users dictionary.')
+    logging.info('Building users dictionary')
     for element in users:
         users_dictionary[element.distinguished_name] = element
 
-    logging.info('Building groups dictionary.')
+    logging.info('Building groups dictionary')
     for element in groups:
+        group_id_to_dn_dictionary[element.primary_group_token] = element.distinguished_name
         groups_dictionary[element.distinguished_name] = element
 
-    logging.info('Building computers dictionary.')
+    logging.info('Building computers dictionary')
     for element in computers:
         computers_dictionary[element.distinguished_name] = element
 
     # Loop through each group. If the membership is a range then query AD to get the full group membership
-    logging.info('Exploding large groups.')
+    logging.info('Exploding large groups')
     for group_key, group_object in groups_dictionary.iteritems():
         if group_object.is_large_group:
-            logging.debug('Getting full membership for group {0}.'.format(group_key))
+            logging.debug('Getting full membership for [%s]', group_key)
             groups_dictionary[group_key].members = get_membership_with_ranges(ldap_client, base_dn, group_key)
 
     # Build group membership
-    logging.info('Building group membership.')
+    logging.info('Building group membership')
+    logging.info('There is a total of [%i] groups', len(groups_dictionary.keys()))
 
+    current_group_number = 0
     _output_dictionary = []
-    for group_distinguished_name in groups_dictionary:
-        logging.debug('Processing group {0}.'.format(group_distinguished_name))
-        temp_output_dictionary = process_group(group_distinguished_name, None, False)
+    for grp in groups_dictionary.keys():
+        current_group_number += 1
+        _output_dictionary += process_group(users_dictionary, groups_dictionary, computers_dictionary, grp)
 
-        if temp_output_dictionary is not None:
-            _output_dictionary += temp_output_dictionary
+        if current_group_number % 1000 == 0:
+            logging.info('Processing group [%i]', current_group_number)
 
+    # TODO: This could create output duplicates. It should be fixed at some point.
     # Add users if they have the group set as their primary ID as the group
-    for user_key, user_object in users_dictionary.iteritems():
+    for user_object in users_dictionary.values():
         if user_object.primary_group_id:
             grp_dn = group_id_to_dn_dictionary[user_object.primary_group_id]
 
@@ -184,10 +189,15 @@ def ldap_queries(ldap_client, base_dn):
             temp_list.append(user_object.sam_account_name)
             temp_list.append(user_object.get_account_flags())
             temp_list.append(user_object.display_name)
+            temp_list.append(user_object.mail)
+            temp_list.append(user_object.home_directory)
+            temp_list.append(user_object.get_password_last_set_date())
+            temp_list.append(user_object.comment)
             _output_dictionary.append(temp_list)
 
+    # TODO: This could create output duplicates. It should be fixed at some point.
     # Add computers if they have the group set as their primary ID as the group
-    for computer_key, computer_object in computers_dictionary.iteritems():
+    for computer_object in computers_dictionary.values():
         if computer_object.primary_group_id:
             grp_dn = group_id_to_dn_dictionary[computer_object.primary_group_id]
 
@@ -197,23 +207,17 @@ def ldap_queries(ldap_client, base_dn):
             _output_dictionary.append(temp_list)
 
     output_buffer = StringIO()
-    output_buffer.write('Group Name|User Name|Status|Name|Password Last Set\n')
+    output_buffer.write('Group Name|User Name|Status|Name|Email|Home Directory|Password Last Set|User Comment\n')
     for element in _output_dictionary:
         output_buffer.write('|'.join(element) + '\n')
 
     return output_buffer
 
-def process_group(group_distinguished_name, base_group_distinguished_name, explode_nested_groups):
-    # Pull in global variables
-    global users_dictionary
-    global groups_dictionary
-    global computers_dictionary
-    global group_id_to_dn_dictionary
-
+def process_group(users_dictionary, groups_dictionary, computers_dictionary, group_distinguished_name):
+    """Builds group membership for a specified group."""
     # Store assorted group information.
     group_dictionary = []
     group_sam_name = groups_dictionary[group_distinguished_name].sam_account_name
-    group_id_to_dn_dictionary[groups_dictionary[group_distinguished_name].primary_group_token] = group_distinguished_name
 
     # Add users/groups/computer if they are a 'memberOf' the group
     for member in groups_dictionary[group_distinguished_name].members:
@@ -225,6 +229,10 @@ def process_group(group_distinguished_name, base_group_distinguished_name, explo
             temp_list.append(user_member.sam_account_name)
             temp_list.append(user_member.get_account_flags())
             temp_list.append(user_member.display_name)
+            temp_list.append(user_member.mail)
+            temp_list.append(user_member.home_directory)
+            temp_list.append(user_member.get_password_last_set_date())
+            temp_list.append(user_member.comment)
             group_dictionary.append(temp_list)
 
         elif member in computers_dictionary:
@@ -238,8 +246,8 @@ def process_group(group_distinguished_name, base_group_distinguished_name, explo
     return group_dictionary
 
 def query_ldap_with_paging(ldap_client, base_dn, search_filter, attributes, output_object=None, page_size=1000):
-    """Get all the AD results from LDAP using a paging approach.
-       By default AD will return 1,000 results per query before it errors out."""
+    """Get all the Active Directory results from LDAP using a paging approach.
+       By default Active Directory will return 1,000 results per query before it errors out."""
 
     # Method Variables
     more_pages = True
@@ -275,6 +283,9 @@ def query_ldap_with_paging(ldap_client, base_dn, search_filter, attributes, outp
     return output_array
 
 def get_membership_with_ranges(ldap_client, base_dn, group_dn):
+    """Queries the membership of an Active Directory group. For large groups Active Directory will
+       Not return the full membership by default but will instead return partial results. Additional
+       processing is needed to get the full membership."""
     output_array = []
 
     membership_filter = '(&(|(objectcategory=user)(objectcategory=group)(objectcategory=computer))(memberof={0}))'.format(group_dn)
@@ -286,10 +297,10 @@ def get_membership_with_ranges(ldap_client, base_dn, group_dn):
     return output_array
 
 if __name__ == '__main__':
-    start_time = time.time()
+    start_time = datetime.datetime.now()
 
     # Command line arguments
-    parser = argparse.ArgumentParser(description="AD LDAP Enumeration")
+    parser = argparse.ArgumentParser(description="Active Directory LDAP Enumerator")
     server_group = parser.add_argument_group('Server Parameters')
     server_group.add_argument('-l', dest='ldap_server', help='LDAP Server')
     server_group.add_argument('-d', dest='domain', help='Fully Qualified Domain Name')
@@ -329,7 +340,7 @@ if __name__ == '__main__':
     # Build the baseDN
     formatted_domain_name = args.domain.replace('.', ',dc=')
     base_dn = 'dc={0}'.format(formatted_domain_name)
-    logging.debug('Using BaseDN of {0}'.format(base_dn))
+    logging.debug('Using BaseDN of [%s]', base_dn)
 
     # Query LDAP
     output = ldap_queries(ldap_client, base_dn)
@@ -337,4 +348,5 @@ if __name__ == '__main__':
 
     print output.getvalue()
 
-    logging.info('Elapsed Time Is {0} Minutes'.format((time.time() - start_time)/60))
+    end_time = datetime.datetime.now()
+    logging.info('Elapsed Time [%s]', end_time - start_time)
