@@ -72,10 +72,14 @@ class ADUser(object):
 
         return _output_string
 
-    @staticmethod
-    def get_password_last_set_date():
-        # Epoch time (AD/10000000)-11644473600
-        None
+    def get_password_last_set_date(self):
+        if (self.password_last_set != '') and (self.password_last_set != '0'):
+            last_set_int = int(self.password_last_set)
+            epoch_time = (last_set_int / 10000000) - 11644473600
+            last_set_time = datetime.datetime.fromtimestamp(epoch_time)
+            return last_set_time.strftime('%m-%d-%y %H:%M:%S')
+
+        return self.password_last_set
 
 class ADComputer(object):
     """A representation of a computer in Active Directory. Class variables are instantiated to a 'safe'
@@ -187,6 +191,7 @@ def ldap_queries(ldap_client, base_dn):
             temp_list.append(user_object.display_name)
             temp_list.append(user_object.mail)
             temp_list.append(user_object.home_directory)
+            temp_list.append(user_object.get_password_last_set_date())
             temp_list.append(user_object.comment)
             _output_dictionary.append(temp_list)
 
@@ -202,7 +207,7 @@ def ldap_queries(ldap_client, base_dn):
             _output_dictionary.append(temp_list)
 
     output_buffer = StringIO()
-    output_buffer.write('Group Name|User Name|Status|Name|Email|Home Directory|User Comment|Password Last Set\n')
+    output_buffer.write('Group Name|User Name|Status|Name|Email|Home Directory|Password Last Set|User Comment\n')
     for element in _output_dictionary:
         output_buffer.write('|'.join(element) + '\n')
 
@@ -226,6 +231,7 @@ def process_group(users_dictionary, groups_dictionary, computers_dictionary, gro
             temp_list.append(user_member.display_name)
             temp_list.append(user_member.mail)
             temp_list.append(user_member.home_directory)
+            temp_list.append(user_member.get_password_last_set_date())
             temp_list.append(user_member.comment)
             group_dictionary.append(temp_list)
 
