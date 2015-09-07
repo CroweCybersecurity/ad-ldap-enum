@@ -302,13 +302,14 @@ if __name__ == '__main__':
     # Command line arguments
     parser = argparse.ArgumentParser(description="Active Directory LDAP Enumerator")
     server_group = parser.add_argument_group('Server Parameters')
-    server_group.add_argument('-l', dest='ldap_server', help='LDAP Server')
-    server_group.add_argument('-d', dest='domain', help='Fully Qualified Domain Name')
+    server_group.add_argument('-l', '--server', dest='ldap_server', help='LDAP Server')
+    server_group.add_argument('-d', '--domain', dest='domain', help='Fully Qualified Domain Name')
+    server_group.add_argument('-e', '--nested', dest='nested_groups', action='store_true', help='Expand Nested Groups')
     authentication_group = parser.add_argument_group('Authentication Parameters')
-    authentication_group.add_argument('-n', dest='null_session', action='store_true', help='Use Null Authentication')
-    authentication_group.add_argument('-u', dest='username', help='Domain & Username')
-    authentication_group.add_argument('-p', dest='password', help='Password')
-    parser.add_argument('-v', dest='verbosity', action='store_true', help='Display Debugging Information')
+    authentication_group.add_argument('-n', '--null', dest='null_session', action='store_true', help='Use Null Authentication')
+    authentication_group.add_argument('-u', '--username', dest='username', help='Domain & Username')
+    authentication_group.add_argument('-p', '--password', dest='password', help='Password')
+    parser.add_argument('-v', '--verbose', dest='verbosity', action='store_true', help='Display Debugging Information')
     args = parser.parse_args()
 
     # Instantiate logger
