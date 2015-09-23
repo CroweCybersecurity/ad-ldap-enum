@@ -14,7 +14,6 @@ import logging
 import argparse
 
 from collections import deque
-from cStringIO import StringIO
 
 class ADUser(object):
     """A representation of a user in Active Directory. Class variables are instantiated to a 'safe'
@@ -29,6 +28,7 @@ class ADUser(object):
     display_name = ''
     mail = ''
     password_last_set = ''
+    last_logon = ''
 
     def __init__(self, retrieved_attributes):
         if 'distinguishedName' in retrieved_attributes:
@@ -49,6 +49,8 @@ class ADUser(object):
             self.mail = retrieved_attributes['mail'][0]
         if 'pwdLastSet' in retrieved_attributes:
             self.password_last_set = retrieved_attributes['pwdLastSet'][0]
+        if 'lastLogon' in retrieved_attributes:
+            self.last_logon = retrieved_attributes['lastLogon'][0]
 
     def get_account_flags(self):
         _output_string = ''
@@ -80,6 +82,15 @@ class ADUser(object):
             return last_set_time.strftime('%m-%d-%y %H:%M:%S')
 
         return self.password_last_set
+
+    def get_last_logon_date(self):
+        if (self.last_logon != '') and (self.last_logon != '0'):
+            last_logon_int = int(self.last_logon)
+            epoch_time = (last_logon_int / 10000000) - 11644473600
+            last_logon_time = datetime.datetime.fromtimestamp(epoch_time)
+            return last_logon_time.strftime('%m-%d-%y %H:%M:%S')
+
+        return self.last_logon
 
 class ADComputer(object):
     """A representation of a computer in Active Directory. Class variables are instantiated to a 'safe'
@@ -128,7 +139,7 @@ def ldap_queries(ldap_client, base_dn):
 
     # LDAP filters
     user_filter = '(objectcategory=user)'
-    user_attributes = ['distinguishedName', 'sAMAccountName', 'userAccountControl', 'primaryGroupID', 'comment', 'homeDirectory', 'displayName', 'mail', 'pwdLastSet']
+    user_attributes = ['distinguishedName', 'sAMAccountName', 'userAccountControl', 'primaryGroupID', 'comment', 'homeDirectory', 'displayName', 'mail', 'pwdLastSet', 'lastLogon']
 
     group_filter = '(objectcategory=group)'
     group_attributes = ['distinguishedName', 'sAMAccountName', 'member', 'primaryGroupToken']
@@ -179,21 +190,34 @@ def ldap_queries(ldap_client, base_dn):
             logging.info('Processing group [%i]', current_group_number)
 
     # TODO: This could create output duplicates. It should be fixed at some point.
-    # Add users if they have the group set as their primary ID as the group
-    for user_object in users_dictionary.values():
-        if user_object.primary_group_id:
-            grp_dn = group_id_to_dn_dictionary[user_object.primary_group_id]
+    # Add users if they have the group set as their primary ID as the group.
+    # Additionally, add extended domain user information to a text file.
+    with open('Extended Domain User Information.txt', 'w') as user_information_file:
+        logging.info('Writing domain user information to [%s]', user_information_file.name)
+        user_information_file.write('SAM Account Name\tStatus\tDisplay Name\tEmail\tHome Directory\tPassword Last Set\tLast Logon\tUser Comment\n')
 
-            temp_list = []
-            temp_list.append(groups_dictionary[grp_dn].sam_account_name)
-            temp_list.append(user_object.sam_account_name)
-            temp_list.append(user_object.get_account_flags())
-            temp_list.append(user_object.display_name)
-            temp_list.append(user_object.mail)
-            temp_list.append(user_object.home_directory)
-            temp_list.append(user_object.get_password_last_set_date())
-            temp_list.append(user_object.comment)
-            _output_dictionary.append(temp_list)
+        for user_object in users_dictionary.values():
+            if user_object.primary_group_id:
+                grp_dn = group_id_to_dn_dictionary[user_object.primary_group_id]
+
+                temp_list_a = []
+                temp_list_b = []
+
+                temp_list_a.append(groups_dictionary[grp_dn].sam_account_name)
+                temp_list_b.append(groups_dictionary[grp_dn].sam_account_name)
+                temp_list_a.append(user_object.sam_account_name)
+                temp_list_b.append(user_object.sam_account_name)
+                temp_list_a.append(user_object.get_account_flags())
+                temp_list_b.append(user_object.get_account_flags())
+                temp_list_a.append(user_object.display_name)
+                temp_list_a.append(user_object.mail)
+                temp_list_a.append(user_object.home_directory)
+                temp_list_a.append(user_object.get_password_last_set_date())
+                temp_list_a.append(user_object.get_last_logon_date())
+                temp_list_a.append(user_object.comment)
+                _output_dictionary.append(temp_list_b)
+
+                user_information_file.write('\t'.join(temp_list_a[1:]) + '\n')
 
     # TODO: This could create output duplicates. It should be fixed at some point.
     # Add computers if they have the group set as their primary ID as the group
@@ -206,12 +230,13 @@ def ldap_queries(ldap_client, base_dn):
             temp_list.append(computer_object.sam_account_name)
             _output_dictionary.append(temp_list)
 
-    output_buffer = StringIO()
-    output_buffer.write('Group Name|User Name|Status|Name|Email|Home Directory|Password Last Set|User Comment\n')
-    for element in _output_dictionary:
-        output_buffer.write('|'.join(element) + '\n')
-
-    return output_buffer
+    # Write Group Memberships
+    with open('Domain Group Membership.txt', 'w') as group_membership_file:
+        logging.info('Writing membership information to [%s]', group_membership_file.name)
+        group_membership_file.write('Group Name\tSAM Account Name\tStatus\n')
+        
+        for element in _output_dictionary:
+            group_membership_file.write('\t'.join(element) + '\n')
 
 def process_group(users_dictionary, groups_dictionary, computers_dictionary, group_distinguished_name):
     """Builds group membership for a specified group."""
@@ -224,15 +249,7 @@ def process_group(users_dictionary, groups_dictionary, computers_dictionary, gro
         if member in users_dictionary:
             user_member = users_dictionary[member]
 
-            temp_list = []
-            temp_list.append(group_sam_name)
-            temp_list.append(user_member.sam_account_name)
-            temp_list.append(user_member.get_account_flags())
-            temp_list.append(user_member.display_name)
-            temp_list.append(user_member.mail)
-            temp_list.append(user_member.home_directory)
-            temp_list.append(user_member.get_password_last_set_date())
-            temp_list.append(user_member.comment)
+            temp_list = [group_sam_name, user_member.sam_account_name, user_member.get_account_flags()]
             group_dictionary.append(temp_list)
 
         elif member in computers_dictionary:
@@ -302,13 +319,14 @@ if __name__ == '__main__':
     # Command line arguments
     parser = argparse.ArgumentParser(description="Active Directory LDAP Enumerator")
     server_group = parser.add_argument_group('Server Parameters')
-    server_group.add_argument('-l', dest='ldap_server', help='LDAP Server')
-    server_group.add_argument('-d', dest='domain', help='Fully Qualified Domain Name')
+    server_group.add_argument('-l', '--server', dest='ldap_server', help='LDAP Server')
+    server_group.add_argument('-d', '--domain', dest='domain', help='Fully Qualified Domain Name')
+    server_group.add_argument('-e', '--nested', dest='nested_groups', action='store_true', help='Expand Nested Groups')
     authentication_group = parser.add_argument_group('Authentication Parameters')
-    authentication_group.add_argument('-n', dest='null_session', action='store_true', help='Use Null Authentication')
-    authentication_group.add_argument('-u', dest='username', help='Domain & Username')
-    authentication_group.add_argument('-p', dest='password', help='Password')
-    parser.add_argument('-v', dest='verbosity', action='store_true', help='Display Debugging Information')
+    authentication_group.add_argument('-n', '--null', dest='null_session', action='store_true', help='Use Null Authentication')
+    authentication_group.add_argument('-u', '--username', dest='username', help='Domain & Username')
+    authentication_group.add_argument('-p', '--password', dest='password', help='Password')
+    parser.add_argument('-v', '--verbose', dest='verbosity', action='store_true', help='Display Debugging Information')
     args = parser.parse_args()
 
     # Instantiate logger
@@ -343,10 +361,8 @@ if __name__ == '__main__':
     logging.debug('Using BaseDN of [%s]', base_dn)
 
     # Query LDAP
-    output = ldap_queries(ldap_client, base_dn)
+    ldap_queries(ldap_client, base_dn)
     ldap_client.unbind()
-
-    print output.getvalue()
 
     end_time = datetime.datetime.now()
     logging.info('Elapsed Time [%s]', end_time - start_time)
