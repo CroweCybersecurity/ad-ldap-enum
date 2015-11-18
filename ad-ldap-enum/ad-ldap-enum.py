@@ -197,7 +197,7 @@ def ldap_queries(ldap_client, base_dn):
         user_information_file.write('SAM Account Name\tStatus\tDisplay Name\tEmail\tHome Directory\tPassword Last Set\tLast Logon\tUser Comment\n')
 
         for user_object in users_dictionary.values():
-            if user_object.primary_group_id:
+            if user_object.primary_group_id and user_object.primary_group_id in group_id_to_dn_dictionary:
                 grp_dn = group_id_to_dn_dictionary[user_object.primary_group_id]
 
                 temp_list_a = []
@@ -234,7 +234,7 @@ def ldap_queries(ldap_client, base_dn):
     with open('Domain Group Membership.txt', 'w') as group_membership_file:
         logging.info('Writing membership information to [%s]', group_membership_file.name)
         group_membership_file.write('Group Name\tSAM Account Name\tStatus\n')
-        
+
         for element in _output_dictionary:
             group_membership_file.write('\t'.join(element) + '\n')
 
