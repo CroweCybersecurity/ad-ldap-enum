@@ -319,12 +319,12 @@ if __name__ == '__main__':
     # Command line arguments
     parser = argparse.ArgumentParser(description="Active Directory LDAP Enumerator")
     server_group = parser.add_argument_group('Server Parameters')
-    server_group.add_argument('-l', '--server', dest='ldap_server', help='LDAP Server')
-    server_group.add_argument('-d', '--domain', dest='domain', help='Fully Qualified Domain Name')
+    server_group.add_argument('-l', '--server', required=True, dest='ldap_server', help='LDAP Server')
+    server_group.add_argument('-d', '--domain', required=True, dest='domain', help='Fully Qualified Domain Name')
     server_group.add_argument('-e', '--nested', dest='nested_groups', action='store_true', help='Expand Nested Groups')
     authentication_group = parser.add_argument_group('Authentication Parameters')
     authentication_group.add_argument('-n', '--null', dest='null_session', action='store_true', help='Use Null Authentication')
-    authentication_group.add_argument('-u', '--username', dest='username', help='Domain & Username')
+    authentication_group.add_argument('-u', '--username', dest='username', help='Username')
     authentication_group.add_argument('-p', '--password', dest='password', help='Password')
     parser.add_argument('-v', '--verbose', dest='verbosity', action='store_true', help='Display Debugging Information')
     args = parser.parse_args()
@@ -346,7 +346,8 @@ if __name__ == '__main__':
         if args.null_session is True:
             ldap_client.simple_bind_s()
         else:
-            ldap_client.simple_bind_s(args.username, args.password)
+            fully_qualified_username = '{0}@{1}'.format(args.username, args.domain)
+            ldap_client.simple_bind_s(fully_qualified_username, args.password)
     except ldap.INVALID_CREDENTIALS:
         ldap_client.unbind()
         logging.error('Incorrect username or password')
