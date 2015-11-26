@@ -9,23 +9,28 @@ pip install python-ldap
 
 ###Usage
 ```
-ad-ldap-enum.py [-h] [-l LDAP_SERVER] [-d DOMAIN] [-n] [-u USERNAME] [-p PASSWORD]
-                [-v]
+ad-ldap-enum.py [-h] -l LDAP_SERVER -d DOMAIN [-e] [-n] [-u USERNAME]
+                       [-p PASSWORD] [-v]
 
 Active Directory LDAP Enumerator
 
 optional arguments:
-  -h, --help      show this help message and exit
-  -v              Display Debugging Information
+  -h, --help            show this help message and exit
+  -v, --verbose         Display Debugging Information
 
 Server Parameters:
-  -l LDAP_SERVER  LDAP Server
-  -d DOMAIN       Fully Qualified Domain Name
+  -l LDAP_SERVER, --server LDAP_SERVER
+                        LDAP Server
+  -d DOMAIN, --domain DOMAIN
+                        Fully Qualified Domain Name
+  -e, --nested          Expand Nested Groups
 
 Authentication Parameters:
-  -n              Use Null Authentication
-  -u USERNAME     Domain & Username
-  -p PASSWORD     Password
+  -n, --null            Use Null Authentication
+  -u USERNAME, --username USERNAME
+                        Username
+  -p PASSWORD, --password PASSWORD
+                        Password
 ```
 
 
