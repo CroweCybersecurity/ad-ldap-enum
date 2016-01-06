@@ -130,7 +130,7 @@ class ADGroup(object):
         if any(dictionary_key.startswith('member;range') for dictionary_key in retrieved_attributes.keys()):
             self.is_large_group = True
 
-def ldap_queries(ldap_client, base_dn):
+def ldap_queries(ldap_client, base_dn, explode_nested_groups):
     """Main worker function for the script."""
     users_dictionary = {}
     groups_dictionary = {}
@@ -184,7 +184,7 @@ def ldap_queries(ldap_client, base_dn):
     _output_dictionary = []
     for grp in groups_dictionary.keys():
         current_group_number += 1
-        _output_dictionary += process_group(users_dictionary, groups_dictionary, computers_dictionary, grp)
+        _output_dictionary += process_group(users_dictionary, groups_dictionary, computers_dictionary, grp, explode_nested_groups, None, [])
 
         if current_group_number % 1000 == 0:
             logging.info('Processing group [%i]', current_group_number)
@@ -238,27 +238,45 @@ def ldap_queries(ldap_client, base_dn):
         for element in _output_dictionary:
             group_membership_file.write('\t'.join(element) + '\n')
 
-def process_group(users_dictionary, groups_dictionary, computers_dictionary, group_distinguished_name):
+def process_group(users_dictionary, groups_dictionary, computers_dictionary, group_distinguished_name, explode_nested, base_group_name, groups_seen):
     """Builds group membership for a specified group."""
     # Store assorted group information.
     group_dictionary = []
-    group_sam_name = groups_dictionary[group_distinguished_name].sam_account_name
+
+    # Query SAM name or used redefined SAM name if processing a nested group.
+    if base_group_name is None:
+        group_sam_name = groups_dictionary[group_distinguished_name].sam_account_name
+    elif base_group_name is not None:
+        group_sam_name = base_group_name
 
     # Add users/groups/computer if they are a 'memberOf' the group
     for member in groups_dictionary[group_distinguished_name].members:
+        # Process users.
         if member in users_dictionary:
             user_member = users_dictionary[member]
 
             temp_list = [group_sam_name, user_member.sam_account_name, user_member.get_account_flags()]
             group_dictionary.append(temp_list)
 
+        # Process computers.
         elif member in computers_dictionary:
             temp_list = [group_sam_name, computers_dictionary[member].sam_account_name]
             group_dictionary.append(temp_list)
 
+        # Process groups.
         elif member in groups_dictionary:
-            temp_list = [group_sam_name, groups_dictionary[member].sam_account_name]
-            group_dictionary.append(temp_list)
+            if not explode_nested or (explode_nested and base_group_name is None):
+                temp_list = [group_sam_name, groups_dictionary[member].sam_account_name]
+                group_dictionary.append(temp_list)
+            
+            if explode_nested:
+                # Stop processing the chain if a circular reference is detected.
+                if member in groups_seen:
+                    pass
+                # Process a nested group.
+                else:
+                    groups_seen.append(member)
+                    group_dictionary += process_group(users_dictionary, groups_dictionary, computers_dictionary, member, True, group_sam_name, groups_seen)
 
     return group_dictionary
 
@@ -362,7 +380,7 @@ if __name__ == '__main__':
     logging.debug('Using BaseDN of [%s]', base_dn)
 
     # Query LDAP
-    ldap_queries(ldap_client, base_dn)
+    ldap_queries(ldap_client, base_dn, args.nested_groups)
     ldap_client.unbind()
 
     end_time = datetime.datetime.now()
