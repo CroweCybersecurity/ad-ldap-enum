@@ -58,7 +58,10 @@ class ADUser(object):
         if self.user_account_control:
             _account_disabled = 2
             _account_locked = 16
+            _passwd_cant_change = 64
             _normal_account = 512
+            _dont_expire_password = 65536
+            _smartcard_required = 262144
             _password_expired = 8388608
 
             _uac_value = int(self.user_account_control)
@@ -71,6 +74,12 @@ class ADUser(object):
                 _output_string += 'NORMAL '
             if _uac_value & _password_expired:
                 _output_string += 'PASSWORD_EXPIRED '
+            if _uac_value & _dont_expire_password:
+                _output_string += 'DONT_EXPIRE_PASSWORD '
+            if _uac_value & _smartcard_required:
+                _output_string += 'SMARTCARD_REQUIRED '
+            if _uac_value & _passwd_cant_change:
+                _output_string += 'PASSWD_CANT_CHANGE '
 
         return _output_string
 
@@ -268,7 +277,7 @@ def process_group(users_dictionary, groups_dictionary, computers_dictionary, gro
             if not explode_nested or (explode_nested and base_group_name is None):
                 temp_list = [group_sam_name, groups_dictionary[member].sam_account_name]
                 group_dictionary.append(temp_list)
-            
+
             if explode_nested:
                 # Stop processing the chain if a circular reference is detected.
                 if member in groups_seen:
