@@ -24,6 +24,7 @@ class ADUser(object):
     user_account_control = ''
     primary_group_id = ''
     comment = ''
+    description = ''
     home_directory = ''
     display_name = ''
     mail = ''
@@ -41,6 +42,8 @@ class ADUser(object):
             self.primary_group_id = retrieved_attributes['primaryGroupID'][0]
         if 'comment' in retrieved_attributes:
             self.comment = retrieved_attributes['comment'][0]
+        if 'description' in retrieved_attributes:
+            self.description = retrieved_attributes['description'][0]
         if 'homeDirectory' in retrieved_attributes:
             self.home_directory = retrieved_attributes['homeDirectory'][0]
         if 'displayName' in retrieved_attributes:
@@ -148,7 +151,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
 
     # LDAP filters
     user_filter = '(objectcategory=user)'
-    user_attributes = ['distinguishedName', 'sAMAccountName', 'userAccountControl', 'primaryGroupID', 'comment', 'homeDirectory', 'displayName', 'mail', 'pwdLastSet', 'lastLogon']
+    user_attributes = ['distinguishedName', 'sAMAccountName', 'userAccountControl', 'primaryGroupID', 'comment', 'description', 'homeDirectory', 'displayName', 'mail', 'pwdLastSet', 'lastLogon']
 
     group_filter = '(objectcategory=group)'
     group_attributes = ['distinguishedName', 'sAMAccountName', 'member', 'primaryGroupToken']
@@ -201,9 +204,9 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
     # TODO: This could create output duplicates. It should be fixed at some point.
     # Add users if they have the group set as their primary ID as the group.
     # Additionally, add extended domain user information to a text file.
-    with open('Extended Domain User Information.txt', 'w') as user_information_file:
+    with open('Extended Domain User Information.tsv', 'w') as user_information_file:
         logging.info('Writing domain user information to [%s]', user_information_file.name)
-        user_information_file.write('SAM Account Name\tStatus\tDisplay Name\tEmail\tHome Directory\tPassword Last Set\tLast Logon\tUser Comment\n')
+        user_information_file.write('SAM Account Name\tStatus\tDisplay Name\tEmail\tHome Directory\tPassword Last Set\tLast Logon\tUser Comment\tDescription\n')
 
         for user_object in users_dictionary.values():
             if user_object.primary_group_id and user_object.primary_group_id in group_id_to_dn_dictionary:
@@ -224,6 +227,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
                 temp_list_a.append(user_object.get_password_last_set_date())
                 temp_list_a.append(user_object.get_last_logon_date())
                 temp_list_a.append(user_object.comment)
+                temp_list_a.append(user_object.description)
                 _output_dictionary.append(temp_list_b)
 
                 user_information_file.write('\t'.join(temp_list_a[1:]) + '\n')
@@ -240,7 +244,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
             _output_dictionary.append(temp_list)
 
     # Write Group Memberships
-    with open('Domain Group Membership.txt', 'w') as group_membership_file:
+    with open('Domain Group Membership.tsv', 'w') as group_membership_file:
         logging.info('Writing membership information to [%s]', group_membership_file.name)
         group_membership_file.write('Group Name\tSAM Account Name\tStatus\n')
 
