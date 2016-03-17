@@ -262,6 +262,11 @@ def process_group(users_dictionary, groups_dictionary, computers_dictionary, gro
     elif base_group_name is not None:
         group_sam_name = base_group_name
 
+    # Add empty groups to the Domain Group Membership list for full visibility.
+    if not groups_dictionary[group_distinguished_name].members:
+        temp_list = [group_sam_name, '']
+        group_dictionary.append(temp_list)
+
     # Add users/groups/computer if they are a 'memberOf' the group
     for member in groups_dictionary[group_distinguished_name].members:
         # Process users.
