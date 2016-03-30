@@ -1,7 +1,7 @@
 ﻿#!/usr/bin/env python
 
 # Author:: Eric DePree
-# Date::   2015
+# Date::   2015, 2016
 
 """An LDAP Active Directory enumerator. The script queries Active Directory over LDAP for users, groups and computers.
    This information is correlated and output to the console showing groups, their membership and other user information.
@@ -111,6 +111,10 @@ class ADComputer(object):
     distinguished_name = ''
     sam_account_name = ''
     primary_group_id = ''
+    operating_system = ''
+    operating_system_hotfix = ''
+    operating_system_service_pack = ''
+    operating_system_version = ''
 
     def __init__(self, retrieved_attributes):
         if 'distinguishedName' in retrieved_attributes:
@@ -119,6 +123,14 @@ class ADComputer(object):
             self.sam_account_name = retrieved_attributes['sAMAccountName'][0]
         if 'primaryGroupID' in retrieved_attributes:
             self.primary_group_id = retrieved_attributes['primaryGroupID'][0]
+        if 'operatingSystem' in retrieved_attributes:
+            self.operating_system = retrieved_attributes['operatingSystem'][0]
+        if 'operatingSystemHotfix' in retrieved_attributes:
+            self.operating_system_hotfix = retrieved_attributes['operatingSystemHotfix'][0]
+        if 'operatingSystemServicePack' in retrieved_attributes:
+            self.operating_system_service_pack = retrieved_attributes['operatingSystemServicePack'][0]
+        if 'operatingSystemVersion' in retrieved_attributes:
+            self.operating_system_version = retrieved_attributes['operatingSystemVersion'][0]
 
 class ADGroup(object):
     """A representation of a group in Active Directory. Class variables are instantiated to a 'safe'
@@ -157,7 +169,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
     group_attributes = ['distinguishedName', 'sAMAccountName', 'member', 'primaryGroupToken']
 
     computer_filters = '(objectcategory=computer)'
-    computer_attributes = ['distinguishedName', 'sAMAccountName', 'primaryGroupID']
+    computer_attributes = ['distinguishedName', 'sAMAccountName', 'primaryGroupID', 'operatingSystem', 'operatingSystemHotfix', 'operatingSystemServicePack', 'operatingSystemVersion']
 
     # LDAP queries
     logging.info('Querying users')
@@ -232,16 +244,31 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
 
                 user_information_file.write('\t'.join(temp_list_a[1:]) + '\n')
 
-    # TODO: This could create output duplicates. It should be fixed at some point.
-    # Add computers if they have the group set as their primary ID as the group
-    for computer_object in computers_dictionary.values():
-        if computer_object.primary_group_id:
-            grp_dn = group_id_to_dn_dictionary[computer_object.primary_group_id]
+    # Write Domain Computer Information
+    with open('Extended Domain Computer Information.tsv', 'w') as computer_information_file:
+        logging.info('Writing domain computer information to [%s]', computer_information_file.name)
+        computer_information_file.write('SAM Account Name\tOS\tOS Hotfix\tOS Service Pack\tOS Version\n')
 
-            temp_list = []
-            temp_list.append(groups_dictionary[grp_dn].sam_account_name)
-            temp_list.append(computer_object.sam_account_name)
-            _output_dictionary.append(temp_list)
+        # TODO: This could create output duplicates. It should be fixed at some point.
+        # Add computers if they have the group set as their primary ID as the group
+        for computer_object in computers_dictionary.values():
+            if computer_object.primary_group_id:
+                grp_dn = group_id_to_dn_dictionary[computer_object.primary_group_id]
+
+                temp_list_a = []
+                temp_list_b = []
+
+                temp_list_a.append(groups_dictionary[grp_dn].sam_account_name)
+                temp_list_a.append(computer_object.sam_account_name)
+
+                temp_list_b.append(computer_object.sam_account_name)
+                temp_list_b.append(computer_object.operating_system)
+                temp_list_b.append(computer_object.operating_system_hotfix)
+                temp_list_b.append(computer_object.operating_system_service_pack)
+                temp_list_b.append(computer_object.operating_system_version)
+
+                computer_information_file.write('\t'.join(temp_list_b) + '\n')
+                _output_dictionary.append(temp_list_a)
 
     # Write Group Memberships
     with open('Domain Group Membership.tsv', 'w') as group_membership_file:
