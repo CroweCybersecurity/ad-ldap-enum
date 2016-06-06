@@ -416,7 +416,7 @@ if __name__ == '__main__':
         logging.error('Incorrect username or password')
         sys.exit(0)
     except ldap.SERVER_DOWN:
-        logging.error('LDAP server is available')
+        logging.error('LDAP server is unavailable')
         sys.exit(0)
 
     # Build the baseDN
