@@ -382,14 +382,15 @@ if __name__ == '__main__':
     # Command line arguments
     parser = argparse.ArgumentParser(description="Active Directory LDAP Enumerator")
     server_group = parser.add_argument_group('Server Parameters')
-    server_group.add_argument('-l', '--server', required=True, dest='ldap_server', help='LDAP Server')
-    server_group.add_argument('-d', '--domain', required=True, dest='domain', help='Fully Qualified Domain Name')
-    server_group.add_argument('-e', '--nested', dest='nested_groups', action='store_true', help='Expand Nested Groups')
+    server_group.add_argument('-l', '--server', required=True, dest='ldap_server', help='IP address of the LDAP server.')
+    server_group.add_argument('-d', '--domain', required=True, dest='domain', help='Authentication account\'s FQDN. If an alternative domain is not specified this will be also used as the Base DN for searching LDAP.')
+    server_group.add_argument('-a', '--alt-domain', dest='alt_domain', help='Alternative FQDN to use as the Base DN for searching LDAP.')
+    server_group.add_argument('-e', '--nested', dest='nested_groups', action='store_true', help='Expand nested groups.')
     authentication_group = parser.add_argument_group('Authentication Parameters')
-    authentication_group.add_argument('-n', '--null', dest='null_session', action='store_true', help='Use Null Authentication')
-    authentication_group.add_argument('-u', '--username', dest='username', help='Username')
-    authentication_group.add_argument('-p', '--password', dest='password', help='Password')
-    parser.add_argument('-v', '--verbose', dest='verbosity', action='store_true', help='Display Debugging Information')
+    authentication_group.add_argument('-n', '--null', dest='null_session', action='store_true', help='Use a null binding to authenticate to LDAP.')
+    authentication_group.add_argument('-u', '--username', dest='username', help='Authentication account\'s username.')
+    authentication_group.add_argument('-p', '--password', dest='password', help='Authentication account\'s password.')
+    parser.add_argument('-v', '--verbose', dest='verbosity', action='store_true', help='Display debugging information.')
     args = parser.parse_args()
 
     # Instantiate logger
@@ -420,7 +421,11 @@ if __name__ == '__main__':
         sys.exit(0)
 
     # Build the baseDN
-    formatted_domain_name = args.domain.replace('.', ',dc=')
+    if args.alt_domain:
+        formatted_domain_name = args.alt_domain.replace('.', ',dc=')
+    else:
+        formatted_domain_name = args.domain.replace('.', ',dc=')
+
     base_dn = 'dc={0}'.format(formatted_domain_name)
     logging.debug('Using BaseDN of [%s]', base_dn)
 
