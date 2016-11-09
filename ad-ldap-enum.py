@@ -30,6 +30,7 @@ class ADUser(object):
     mail = ''
     password_last_set = ''
     last_logon = ''
+    profile_path = ''
 
     def __init__(self, retrieved_attributes):
         if 'distinguishedName' in retrieved_attributes:
@@ -54,6 +55,8 @@ class ADUser(object):
             self.password_last_set = retrieved_attributes['pwdLastSet'][0]
         if 'lastLogon' in retrieved_attributes:
             self.last_logon = retrieved_attributes['lastLogon'][0]
+        if 'profilePath' in retrieved_attributes:
+            self.profile_path = retrieved_attributes['profilePath'][0]
 
     def get_account_flags(self):
         _output_string = ''
@@ -163,7 +166,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
 
     # LDAP filters
     user_filter = '(objectcategory=user)'
-    user_attributes = ['distinguishedName', 'sAMAccountName', 'userAccountControl', 'primaryGroupID', 'comment', 'description', 'homeDirectory', 'displayName', 'mail', 'pwdLastSet', 'lastLogon']
+    user_attributes = ['distinguishedName', 'sAMAccountName', 'userAccountControl', 'primaryGroupID', 'comment', 'description', 'homeDirectory', 'displayName', 'mail', 'pwdLastSet', 'lastLogon', 'profilePath']
 
     group_filter = '(objectcategory=group)'
     group_attributes = ['distinguishedName', 'sAMAccountName', 'member', 'primaryGroupToken']
@@ -218,7 +221,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
     # Additionally, add extended domain user information to a text file.
     with open('Extended Domain User Information.tsv', 'w') as user_information_file:
         logging.info('Writing domain user information to [%s]', user_information_file.name)
-        user_information_file.write('SAM Account Name\tStatus\tDisplay Name\tEmail\tHome Directory\tPassword Last Set\tLast Logon\tUser Comment\tDescription\n')
+        user_information_file.write('SAM Account Name\tStatus\tDisplay Name\tEmail\tHome Directory\tProfile Path\tPassword Last Set\tLast Logon\tUser Comment\tDescription\n')
 
         for user_object in users_dictionary.values():
             if user_object.primary_group_id and user_object.primary_group_id in group_id_to_dn_dictionary:
@@ -236,6 +239,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
                 temp_list_a.append(user_object.display_name)
                 temp_list_a.append(user_object.mail)
                 temp_list_a.append(user_object.home_directory)
+                temp_list_a.append(user_object.profile_path)
                 temp_list_a.append(user_object.get_password_last_set_date())
                 temp_list_a.append(user_object.get_last_logon_date())
                 temp_list_a.append(user_object.comment)
