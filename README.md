@@ -1,5 +1,5 @@
 # ad-ldap-enum
-##### Python v2.7.12
+##### Python v2.7.13
 
 ### About
 ad-ldap-enum is a Python script that was developed to discover users and their group memberships from Active Directory. In large Active Directory environments, tools such as NBTEnum were not performing fast enough. By executing LDAP queries against a domain controller, ad-ldap-enum is able to target specific Active Directory attributes and build out group membership quickly.
@@ -21,19 +21,20 @@ ad-ldap-enum.py [-h] -l LDAP_SERVER -d DOMAIN [-a ALT_DOMAIN] [-e] [-n] [-u USER
 Active Directory LDAP Enumerator
 
 optional arguments:
-  -h, --help                                show this help message and exit
-  -v, --verbose                             Display debugging information.
+  -h, --help                                        show this help message and exit
+  -v, --verbose                                     Display debugging information.
+  -o FILENAME_PREPEND, --prepend FILENAME_PREPEND   Prepend a string to all output file names.
 
 Server Parameters:
-  -l LDAP_SERVER, --server LDAP_SERVER      IP address of the LDAP server.
-  -d DOMAIN, --domain DOMAIN                Authentication account's FQDN. If an alternative domain is not specified this will be also used as the Base DN for searching LDAP.
-  -a ALT_DOMAIN, --alt-domain ALT_DOMAIN    Alternative FQDN to use as the Base DN for searching LDAP.
-  -e, --nested                              Expand nested groups.
+  -l LDAP_SERVER, --server LDAP_SERVER              IP address of the LDAP server.
+  -d DOMAIN, --domain DOMAIN                        Authentication account's FQDN. If an alternative domain is not specified this will be also used as the Base DN for searching LDAP.
+  -a ALT_DOMAIN, --alt-domain ALT_DOMAIN            Alternative FQDN to use as the Base DN for searching LDAP.
+  -e, --nested                                      Expand nested groups.
 
 Authentication Parameters:
-  -n, --null                                Use a null binding to authenticate to LDAP.
-  -u USERNAME, --username USERNAME          Authentication account's username.
-  -p PASSWORD, --password PASSWORD          Authentication account's password.
+  -n, --null                                        Use a null binding to authenticate to LDAP.
+  -u USERNAME, --username USERNAME                  Authentication account's username.
+  -p PASSWORD, --password PASSWORD                  Authentication account's password.
 ```
 
 ### Example

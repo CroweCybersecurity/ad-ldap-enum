@@ -1,7 +1,7 @@
 ﻿#!/usr/bin/env python
 
 # Author:: Eric DePree
-# Date::   2015, 2016
+# Date::   2015 - 2017
 
 """An LDAP Active Directory enumerator. The script queries Active Directory over LDAP for users, groups and computers.
    This information is correlated and output to the console showing groups, their membership and other user information.
@@ -225,7 +225,8 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
     # TODO: This could create output duplicates. It should be fixed at some point.
     # Add users if they have the group set as their primary ID as the group.
     # Additionally, add extended domain user information to a text file.
-    with open('Extended Domain User Information.tsv', 'w') as user_information_file:
+    user_information_filename = '{0} Extended Domain User Information.tsv'.format(args.filename_prepend).strip()
+    with open(user_information_filename, 'w') as user_information_file:
         logging.info('Writing domain user information to [%s]', user_information_file.name)
         user_information_file.write('SAM Account Name\tStatus\tLocked Out\tDisplay Name\tEmail\tHome Directory\tProfile Path\tLogon Script Path\tPassword Last Set\tLast Logon\tUser Comment\tDescription\n')
 
@@ -257,7 +258,8 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
                 user_information_file.write('\t'.join(temp_list_a[1:]) + '\n')
 
     # Write Domain Computer Information
-    with open('Extended Domain Computer Information.tsv', 'w') as computer_information_file:
+    computer_information_filename = '{0} Extended Domain Computer Information.tsv'.format(args.filename_prepend).strip()
+    with open(computer_information_filename, 'w') as computer_information_file:
         logging.info('Writing domain computer information to [%s]', computer_information_file.name)
         computer_information_file.write('SAM Account Name\tOS\tOS Hotfix\tOS Service Pack\tOS Version\n')
 
@@ -283,7 +285,8 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
                 _output_dictionary.append(temp_list_a)
 
     # Write Group Memberships
-    with open('Domain Group Membership.tsv', 'w') as group_membership_file:
+    group_membership_filename = '{0} Domain Group Membership.tsv'.format(args.filename_prepend).strip()
+    with open(group_membership_filename, 'w') as group_membership_file:
         logging.info('Writing membership information to [%s]', group_membership_file.name)
         group_membership_file.write('Group Name\tSAM Account Name\tStatus\n')
 
@@ -403,6 +406,7 @@ if __name__ == '__main__':
     authentication_group.add_argument('-u', '--username', dest='username', help='Authentication account\'s username.')
     authentication_group.add_argument('-p', '--password', dest='password', help='Authentication account\'s password.')
     parser.add_argument('-v', '--verbose', dest='verbosity', action='store_true', help='Display debugging information.')
+    parser.add_argument('-o', '--prepend', dest='filename_prepend', default='', help='Prepend a string to all output file names.')
     args = parser.parse_args()
 
     # Instantiate logger
