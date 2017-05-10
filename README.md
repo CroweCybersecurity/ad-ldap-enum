@@ -33,6 +33,7 @@ Server Parameters:
 
 Authentication Parameters:
   -n, --null                                        Use a null binding to authenticate to LDAP.
+  -s, --secure                                      Connect to LDAP over SSL
   -u USERNAME, --username USERNAME                  Authentication account's username.
   -p PASSWORD, --password PASSWORD                  Authentication account's password.
 ```

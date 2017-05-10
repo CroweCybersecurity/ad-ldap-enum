@@ -403,6 +403,7 @@ if __name__ == '__main__':
     server_group.add_argument('-e', '--nested', dest='nested_groups', action='store_true', help='Expand nested groups.')
     authentication_group = parser.add_argument_group('Authentication Parameters')
     authentication_group.add_argument('-n', '--null', dest='null_session', action='store_true', help='Use a null binding to authenticate to LDAP.')
+    authentication_group.add_argument('-s', '--secure', dest='secure_comm', action='store_true', help='Connect to LDAP over SSL')
     authentication_group.add_argument('-u', '--username', dest='username', help='Authentication account\'s username.')
     authentication_group.add_argument('-p', '--password', dest='password', help='Authentication account\'s password.')
     parser.add_argument('-v', '--verbose', dest='verbosity', action='store_true', help='Display debugging information.')
@@ -419,21 +420,31 @@ if __name__ == '__main__':
 
     try:
         # Connect to LDAP
-        ldap_client = ldap.initialize('ldap://{0}'.format(args.ldap_server))
+        if args.secure_comm:
+            ldap.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_ALLOW)
+            ldap_client = ldap.initialize('ldaps://{0}'.format(args.ldap_server))
+        else:
+            ldap_client = ldap.initialize('ldap://{0}'.format(args.ldap_server))
+
+        logging.debug('Connecting to LDAP server at [%s]', ldap_client.get_option(ldap.OPT_URI))
+
         ldap_client.set_option(ldap.OPT_REFERRALS, ldap.OPT_OFF)
         ldap_client.protocol_version = 3
+
         # LDAP Authentication
         if args.null_session is True:
             ldap_client.simple_bind_s()
         else:
             fully_qualified_username = '{0}@{1}'.format(args.username, args.domain)
             ldap_client.simple_bind_s(fully_qualified_username, args.password)
-    except ldap.INVALID_CREDENTIALS:
+    except ldap.INVALID_CREDENTIALS, e:
         ldap_client.unbind()
         logging.error('Incorrect username or password')
+        logging.debug(e)
         sys.exit(0)
-    except ldap.SERVER_DOWN:
+    except ldap.SERVER_DOWN, e:
         logging.error('LDAP server is unavailable')
+        logging.debug(e)
         sys.exit(0)
 
     # Build the baseDN
