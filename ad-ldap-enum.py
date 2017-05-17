@@ -44,9 +44,9 @@ class ADUser(object):
         if 'primaryGroupID' in retrieved_attributes:
             self.primary_group_id = retrieved_attributes['primaryGroupID'][0]
         if 'comment' in retrieved_attributes:
-            self.comment = retrieved_attributes['comment'][0]
+            self.comment = retrieved_attributes['comment'][0].replace('\t', '*TAB*').replace('\r', '*CR*').replace('\n', '*LF*')
         if 'description' in retrieved_attributes:
-            self.description = retrieved_attributes['description'][0]
+            self.description = retrieved_attributes['description'][0].replace('\t', '*TAB*').replace('\r', '*CR*').replace('\n', '*LF*')
         if 'homeDirectory' in retrieved_attributes:
             self.home_directory = retrieved_attributes['homeDirectory'][0]
         if 'displayName' in retrieved_attributes:
