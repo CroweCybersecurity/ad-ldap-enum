@@ -1,5 +1,5 @@
 # ad-ldap-enum
-##### Python v2.7.13
+An LDAP based Active Directory user and group enumeration tool
 
 ### About
 ad-ldap-enum is a Python script that was developed to discover users and their group memberships from Active Directory. In large Active Directory environments, tools such as NBTEnum were not performing fast enough. By executing LDAP queries against a domain controller, ad-ldap-enum is able to target specific Active Directory attributes and build out group membership quickly.
@@ -13,6 +13,8 @@ The package [python-ldap](http://www.python-ldap.org/index.html) is required for
 ```
 pip install python-ldap
 ````
+
+Additionally, this tools has been built and tested against Python v2.7.13 and python-ldap v2.4.20
 
 ### Usage
 ```
