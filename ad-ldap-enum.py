@@ -409,10 +409,15 @@ if __name__ == '__main__':
     authentication_group.add_argument('-s', '--secure', dest='secure_comm', action='store_true', help='Connect to LDAP over SSL')
     authentication_group.add_argument('-u', '--username', dest='username', help='Authentication account\'s username.')
     authentication_group.add_argument('-p', '--password', dest='password', help='Authentication account\'s password.')
-    parser.add_argument('-v', '--verbose', dest='verbosity', action='store_true', help='Display debugging information.')
+    authentication_group.add_argument('-P', '--prompt', dest='passwordPrompt', action='store_true', help='Prompt for the authentication account\'s password.')    
+   parser.add_argument('-v', '--verbose', dest='verbosity', action='store_true', help='Display debugging information.')
     parser.add_argument('-o', '--prepend', dest='filename_prepend', default='', help='Prepend a string to all output file names.')
     args = parser.parse_args()
 
+   # If --prompt then overwrite args.password now
+   if args.passwordPrompt is True:
+      args.password = getpass.getpass()
+   
     # Instantiate logger
     if args.verbosity is True:
         logLevel = 10
