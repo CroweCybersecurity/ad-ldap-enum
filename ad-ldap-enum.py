@@ -346,6 +346,7 @@ def query_ldap_with_paging(ldap_client, base_dn, search_filter, attributes, outp
        By default Active Directory will return 1,000 results per query before it errors out."""
 
     # Method Variables
+    cookie=''
     more_pages = True
     output_array = deque()
 
