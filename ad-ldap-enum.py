@@ -12,7 +12,7 @@ import ldap
 import datetime
 import logging
 import argparse
-import getpass
+from getpass import getpass
 
 from collections import deque
 
@@ -384,10 +384,7 @@ def get_membership_with_ranges(ldap_client, base_dn, group_dn):
        processing is needed to get the full membership."""
     output_array = []
 
-    # RFC 4515 sanitation.
-    sanatized_group_dn = group_dn.replace('(', '\\28').replace(')', '\\29').replace('*', '\\2a').replace('\\', '\\5c')
-
-    membership_filter = '(&(|(objectcategory=user)(objectcategory=group)(objectcategory=computer))(memberof={0}))'.format(sanatized_group_dn)
+    membership_filter = '(&(|(objectcategory=user)(objectcategory=group)(objectcategory=computer))(memberof={0}))'.format(group_dn)
     membership_results = query_ldap_with_paging(ldap_client, base_dn, membership_filter, ['distinguishedName'])
 
     for element in membership_results:
@@ -409,16 +406,14 @@ if __name__ == '__main__':
     authentication_group.add_argument('-n', '--null', dest='null_session', action='store_true', help='Use a null binding to authenticate to LDAP.')
     authentication_group.add_argument('-s', '--secure', dest='secure_comm', action='store_true', help='Connect to LDAP over SSL')
     authentication_group.add_argument('-u', '--username', dest='username', help='Authentication account\'s username.')
-    authentication_group.add_argument('-p', '--password', dest='password', help='Authentication account\'s password.')
-    authentication_group.add_argument('-P', '--prompt', dest='passwordPrompt', action='store_true', help='Prompt for the authentication account\'s password.')    
+    authentication_group.add_argument('-p', '--password', action='store_true', dest='password', help='Authentication account\'s password.')
     parser.add_argument('-v', '--verbose', dest='verbosity', action='store_true', help='Display debugging information.')
     parser.add_argument('-o', '--prepend', dest='filename_prepend', default='', help='Prepend a string to all output file names.')
     args = parser.parse_args()
 
-   # If --prompt then overwrite args.password now
-    if args.passwordPrompt is True:
-        args.password = getpass.getpass()
-   
+    if args.password:
+        args.password = getpass()
+
     # Instantiate logger
     if args.verbosity is True:
         logLevel = 10
