@@ -32,6 +32,7 @@ Server Parameters:
   -d DOMAIN, --domain DOMAIN                        Authentication account's FQDN. If an alternative domain is not specified this will be also used as the Base DN for searching LDAP.
   -a ALT_DOMAIN, --alt-domain ALT_DOMAIN            Alternative FQDN to use as the Base DN for searching LDAP.
   -e, --nested                                      Expand nested groups.
+  -S, --spns                                        Search for SPNs for each given computer acount
 
 Authentication Parameters:
   -n, --null                                        Use a null binding to authenticate to LDAP.
