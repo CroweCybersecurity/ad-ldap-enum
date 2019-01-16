@@ -47,3 +47,4 @@ Authentication Parameters:
 ### Assorted Links
 * [Membership Ranges in Active Directory](https://msdn.microsoft.com/en-us/library/Aa367017)
 * [Active Directory Paging](https://technet.microsoft.com/en-us/library/Cc755809(v=WS.10).aspx#w2k3tr_adsrh_how_lhjt)
+* [Commonly Used SPNs](https://adsecurity.org/?page_id=183)
