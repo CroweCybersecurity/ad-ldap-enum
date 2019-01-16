@@ -127,7 +127,6 @@ class ADComputer(object):
     operating_system_version = ''
     service_principal_names = []
 
-
     def __init__(self, retrieved_attributes):
 
         if 'distinguishedName' in retrieved_attributes:
