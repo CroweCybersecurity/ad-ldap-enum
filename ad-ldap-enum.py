@@ -453,7 +453,7 @@ if __name__ == '__main__':
     server_group.add_argument('-d', '--domain', required=True, dest='domain', help='Authentication account\'s FQDN. If an alternative domain is not specified this will be also used as the Base DN for searching LDAP.')
     server_group.add_argument('-a', '--alt-domain', dest='alt_domain', help='Alternative FQDN to use as the Base DN for searching LDAP.')
     server_group.add_argument('-e', '--nested', dest='nested_groups', action='store_true', help='Expand nested groups.')
-    server_group.add_argument('-S', '--spns', dest='spns', action='store_true', help='Search for SPNs for each even computer acount')
+    server_group.add_argument('-S', '--spns', dest='spns', action='store_true', help='Search for SPNs for each given computer acount')
     authentication_group = parser.add_argument_group('Authentication Parameters')
     authentication_group.add_argument('-n', '--null', dest='null_session', action='store_true', help='Use a null binding to authenticate to LDAP.')
     authentication_group.add_argument('-s', '--secure', dest='secure_comm', action='store_true', help='Connect to LDAP over SSL')
