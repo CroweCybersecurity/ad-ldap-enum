@@ -130,7 +130,6 @@ class ADComputer(object):
 
     def __init__(self, retrieved_attributes):
 
-
         if 'distinguishedName' in retrieved_attributes:
             self.distinguished_name = retrieved_attributes['distinguishedName'][0]
         if 'sAMAccountName' in retrieved_attributes:
@@ -407,7 +406,6 @@ def get_membership_with_ranges(ldap_client, base_dn, group_dn):
 # We need to parse out the SPNs list for each host in order to sort them out for file write and easier useage.
 def parse_spns(service_principle_names):
 
-
     temp_sql_spns = []
     sql_spn_strings = ['MSSQLSvc', 'gateway', 'hbase', 'HBase', 'hdb', 'hdfs', 'hive', 'Kafka', 'mongod', 'mongos', 'MSOLAPSvc', 'MSSQL', 'oracle', 'postgres']
     temp_ra_spns = []
@@ -444,9 +442,6 @@ def parse_spns(service_principle_names):
             temp_other_spns.append(spn)
 
     return [temp_sql_spns, temp_ra_spns, temp_share_spns, temp_mail_spns, temp_auth_spns, temp_backup_spns, temp_management_spns, temp_other_spns]
-
-
-
 
 if __name__ == '__main__':
     start_time = datetime.datetime.now()
