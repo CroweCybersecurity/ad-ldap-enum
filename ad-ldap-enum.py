@@ -3,6 +3,9 @@
 # Author:: Eric DePree
 # Date::   2015 - 2017
 
+# Modified: dekanfrus - October 15, 2019 
+# Retrieve the "userPassword" field for user accounts, which is commonly used in SSO applications. Password is stored in cleartex.
+
 """An LDAP Active Directory enumerator. The script queries Active Directory over LDAP for users, groups and computers.
    This information is correlated and output to the console showing groups, their membership and other user information.
    The script supports null and authenticated Active Directory access."""
@@ -34,6 +37,7 @@ class ADUser(object):
     profile_path = ''
     locked_out = 'NO'
     logon_script = ''
+    user_password = ''
 
     def __init__(self, retrieved_attributes):
         if 'distinguishedName' in retrieved_attributes:
@@ -44,6 +48,8 @@ class ADUser(object):
             self.user_account_control = retrieved_attributes['userAccountControl'][0]
         if 'primaryGroupID' in retrieved_attributes:
             self.primary_group_id = retrieved_attributes['primaryGroupID'][0]
+        if 'userPassword' in retrieved_attributes:
+            self.user_password = retrieved_attributes['userPassword'][0]
         if 'comment' in retrieved_attributes:
             self.comment = retrieved_attributes['comment'][0].replace('\t', '*TAB*').replace('\r', '*CR*').replace('\n', '*LF*')
         if 'description' in retrieved_attributes:
@@ -173,7 +179,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
 
     # LDAP filters
     user_filter = '(objectcategory=user)'
-    user_attributes = ['distinguishedName', 'sAMAccountName', 'userAccountControl', 'primaryGroupID', 'comment', 'description', 'homeDirectory', 'displayName', 'mail', 'pwdLastSet', 'lastLogon', 'profilePath', 'lockoutTime', 'scriptPath']
+    user_attributes = ['distinguishedName', 'sAMAccountName', 'userAccountControl', 'primaryGroupID', 'comment', 'description', 'homeDirectory', 'displayName', 'mail', 'pwdLastSet', 'lastLogon', 'profilePath', 'lockoutTime', 'scriptPath', 'userPassword']
 
     group_filter = '(objectcategory=group)'
     group_attributes = ['distinguishedName', 'sAMAccountName', 'member', 'primaryGroupToken']
@@ -229,7 +235,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
     user_information_filename = '{0} Extended Domain User Information.tsv'.format(args.filename_prepend).strip()
     with open(user_information_filename, 'w') as user_information_file:
         logging.info('Writing domain user information to [%s]', user_information_file.name)
-        user_information_file.write('SAM Account Name\tStatus\tLocked Out\tDisplay Name\tEmail\tHome Directory\tProfile Path\tLogon Script Path\tPassword Last Set\tLast Logon\tUser Comment\tDescription\n')
+        user_information_file.write('SAM Account Name\tStatus\tLocked Out\tUser Password\tDisplay Name\tEmail\tHome Directory\tProfile Path\tLogon Script Path\tPassword Last Set\tLast Logon\tUser Comment\tDescription\n')
 
         for user_object in users_dictionary.values():
             if user_object.primary_group_id and user_object.primary_group_id in group_id_to_dn_dictionary:
@@ -245,6 +251,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
                 temp_list_a.append(user_object.get_account_flags())
                 temp_list_b.append(user_object.get_account_flags())
                 temp_list_a.append(user_object.locked_out)
+                temp_list_a.append(user_object.user_password)
                 temp_list_a.append(user_object.display_name)
                 temp_list_a.append(user_object.mail)
                 temp_list_a.append(user_object.home_directory)
