@@ -39,7 +39,6 @@ Authentication Parameters:
   -u USERNAME, --username USERNAME                  Authentication account's username.
   -p PASSWORD, --password PASSWORD                  Authentication account's password.
   -P. --prompt                                      Prompt for the authentication account's password.
-  -P, --prompt										
 ```
 
 ### Example
