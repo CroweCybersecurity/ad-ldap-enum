@@ -131,6 +131,7 @@ class ADComputer(object):
     operating_system_hotfix = ''
     operating_system_service_pack = ''
     operating_system_version = ''
+    service_principal_names = []
 
     def __init__(self, retrieved_attributes):
         if 'distinguishedName' in retrieved_attributes:
@@ -147,6 +148,8 @@ class ADComputer(object):
             self.operating_system_service_pack = retrieved_attributes['operatingSystemServicePack'][0]
         if 'operatingSystemVersion' in retrieved_attributes:
             self.operating_system_version = retrieved_attributes['operatingSystemVersion'][0]
+        if 'servicePrincipalName' in retrieved_attributes:
+            self.service_principal_names = retrieved_attributes['servicePrincipalName']
 
 class ADGroup(object):
     """A representation of a group in Active Directory. Class variables are instantiated to a 'safe'
@@ -185,7 +188,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
     group_attributes = ['distinguishedName', 'sAMAccountName', 'member', 'primaryGroupToken']
 
     computer_filters = '(objectcategory=computer)'
-    computer_attributes = ['distinguishedName', 'sAMAccountName', 'primaryGroupID', 'operatingSystem', 'operatingSystemHotfix', 'operatingSystemServicePack', 'operatingSystemVersion']
+    computer_attributes = ['distinguishedName', 'sAMAccountName', 'primaryGroupID', 'operatingSystem', 'operatingSystemHotfix', 'operatingSystemServicePack', 'operatingSystemVersion', 'servicePrincipalName']
 
     # LDAP queries
     logging.info('Querying users')
@@ -281,7 +284,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
     computer_information_filename = '{0} Extended Domain Computer Information.tsv'.format(args.filename_prepend).strip()
     with open(computer_information_filename, 'w') as computer_information_file:
         logging.info('Writing domain computer information to [%s]', computer_information_file.name)
-        computer_information_file.write('SAM Account Name\tOS\tOS Hotfix\tOS Service Pack\tOS Version\n')
+        computer_information_file.write('SAM Account Name\tOS\tOS Hotfix\tOS Service Pack\tOS VersiontSQL SPNs\tRA SPNS\tShare SPNs\tMail SPNs\tAuth SPNs\tBackup SPNs\tManagement SPNs\tOther SPNs\n')
 
         # TODO: This could create output duplicates. It should be fixed at some point.
         # Add computers if they have the group set as their primary ID as the group
@@ -300,6 +303,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
                 temp_list_b.append(computer_object.operating_system_hotfix)
                 temp_list_b.append(computer_object.operating_system_service_pack)
                 temp_list_b.append(computer_object.operating_system_version)
+                [temp_list_b.append(','.join(map(str, item))) for item in parse_spns(computer_object.service_principal_names)]
 
                 tmp_element = ""
                 for x, binary_string in enumerate(temp_list_b):
@@ -420,6 +424,44 @@ def query_ldap_with_paging(ldap_client, base_dn, search_filter, attributes, outp
             ldap_control.cookie = cookie
 
     return output_array
+
+def parse_spns(service_principle_names):
+    temp_sql_spns = []
+    sql_spn_strings = ['MSSQLSvc', 'gateway', 'hbase', 'HBase', 'hdb', 'hdfs', 'hive', 'Kafka', 'mongod', 'mongos', 'MSOLAPSvc', 'MSSQL', 'oracle', 'postgres']
+    temp_ra_spns = []
+    ra_spn_strings = ['vnc', 'WSMAN', 'TERMSRV', 'RPC', 'HTTP', 'https', 'jboss']
+    temp_share_spns = []
+    share_spn_strings = ['cifs', 'CIFS', 'afpserver', 'AFServer', 'nfs', 'Dfsr-12F9A27C-BF97-4787-9364-D31B6C55EB04', 'ftp', 'iSCSITarget']
+    temp_mail_spns = []
+    mail_spn_strings = ['SMTPSVC', 'SMTP', 'exchangeAB', 'exchangeMDB', 'exchangeRFR', 'IMAP', 'IMAP4', 'POP', 'POP3']
+    temp_auth_spns = []
+    auth_spn_strings = ['ldap', 'aradminsvc', 'DNS', 'FIMService', 'GC', 'kadmin', 'OA60']
+    temp_backup_spns = []
+    backup_spn_strings = ['AcronisAgent', 'Agent VProRecovery Norton Ghost 12.0', 'Backup Exec System Recovery Agent 6.0', 'LiveState Recovery Agent 6.0']
+    temp_management_spns = []
+    management_spn_strings = ['AdtServer', 'AgpmServer', 'CAXOsoftEngine', 'CAARCserveRHAEngine', 'Cognos', 'ckp_pdp', 'CmRcService', 'Hyper-V Replica Service', 'Microsoft Virtual Console Service', 'MSClusterVirtualServer', 'MSServerCluster', 'MSOMHSvc', 'MSOMSdkSvc', 'PCNSCLNT', 'SCVMM']
+    temp_other_spns = []
+
+    for spn in service_principle_names:
+
+        if spn.split(b'/')[0] in sql_spn_strings:
+            temp_sql_spns.append(spn)
+        elif spn.split(b'/')[0] in ra_spn_strings:
+            temp_ra_spns.append(spn)
+        elif spn.split(b'/')[0] in share_spn_strings:
+            temp_share_spns.append(spn)
+        elif spn.split(b'/')[0] in mail_spn_strings:
+            temp_mail_spns.append(spn)
+        elif spn.split(b'/')[0] in auth_spn_strings:
+            temp_auth_spns.append(spn)
+        elif spn.split(b'/')[0] in backup_spn_strings:
+            temp_backup_spns.append(spn)
+        elif spn.split(b'/')[0] in management_spn_strings:
+            temp_management_spns.append(spn)
+        else:
+            temp_other_spns.append(spn)
+
+    return [temp_sql_spns, temp_ra_spns, temp_share_spns, temp_mail_spns, temp_auth_spns, temp_backup_spns, temp_management_spns, temp_other_spns]
 
 def get_membership_with_ranges(ldap_client, base_dn, group_dn):
     """Queries the membership of an Active Directory group. For large groups Active Directory will
