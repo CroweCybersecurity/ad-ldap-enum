@@ -45,9 +45,9 @@ class ADUser(object):
         if 'primaryGroupID' in retrieved_attributes:
             self.primary_group_id = retrieved_attributes['primaryGroupID'][0]
         if 'comment' in retrieved_attributes:
-            self.comment = retrieved_attributes['comment'][0].replace('\t', '*TAB*').replace('\r', '*CR*').replace('\n', '*LF*')
+            self.comment = str(retrieved_attributes['comment'][0]).replace("\t", '*TAB*').replace("\r", '*CR*').replace("\n", '*LF*')
         if 'description' in retrieved_attributes:
-            self.description = retrieved_attributes['description'][0].replace('\t', '*TAB*').replace('\r', '*CR*').replace('\n', '*LF*')
+            self.description = str(retrieved_attributes['description'][0]).replace("\t", '*TAB*').replace("\r", '*CR*').replace("\n", '*LF*')
         if 'homeDirectory' in retrieved_attributes:
             self.home_directory = retrieved_attributes['homeDirectory'][0]
         if 'displayName' in retrieved_attributes:
@@ -60,7 +60,7 @@ class ADUser(object):
             self.last_logon = retrieved_attributes['lastLogon'][0]
         if 'profilePath' in retrieved_attributes:
             self.profile_path = retrieved_attributes['profilePath'][0]
-        if 'lockoutTime' in retrieved_attributes and retrieved_attributes['lockoutTime'][0] is not '0':
+        if 'lockoutTime' in retrieved_attributes and retrieved_attributes['lockoutTime'][0] != '0':
             self.locked_out = 'YES'
         if 'scriptPath' in retrieved_attributes:
             self.logon_script = retrieved_attributes['scriptPath'][0]
@@ -161,7 +161,7 @@ class ADGroup(object):
             self.primary_group_token = retrieved_attributes['primaryGroupToken'][0]
         if 'member' in retrieved_attributes:
             self.members = retrieved_attributes['member']
-        if any(dictionary_key.startswith('member;range') for dictionary_key in retrieved_attributes.keys()):
+        if any(dictionary_key.startswith('member;range') for dictionary_key in list(retrieved_attributes.keys())):
             self.is_large_group = True
 
 def ldap_queries(ldap_client, base_dn, explode_nested_groups):
@@ -205,18 +205,18 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
 
     # Loop through each group. If the membership is a range then query AD to get the full group membership
     logging.info('Exploding large groups')
-    for group_key, group_object in groups_dictionary.iteritems():
+    for group_key, group_object in groups_dictionary.items():
         if group_object.is_large_group:
             logging.debug('Getting full membership for [%s]', group_key)
             groups_dictionary[group_key].members = get_membership_with_ranges(ldap_client, base_dn, group_key)
 
     # Build group membership
     logging.info('Building group membership')
-    logging.info('There is a total of [%i] groups', len(groups_dictionary.keys()))
+    logging.info('There is a total of [%i] groups', len(list(groups_dictionary.keys())))
 
     current_group_number = 0
     _output_dictionary = []
-    for grp in groups_dictionary.keys():
+    for grp in list(groups_dictionary.keys()):
         current_group_number += 1
         _output_dictionary += process_group(users_dictionary, groups_dictionary, computers_dictionary, grp, explode_nested_groups, None, [])
 
@@ -231,7 +231,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
         logging.info('Writing domain user information to [%s]', user_information_file.name)
         user_information_file.write('SAM Account Name\tStatus\tLocked Out\tDisplay Name\tEmail\tHome Directory\tProfile Path\tLogon Script Path\tPassword Last Set\tLast Logon\tUser Comment\tDescription\n')
 
-        for user_object in users_dictionary.values():
+        for user_object in list(users_dictionary.values()):
             if user_object.primary_group_id and user_object.primary_group_id in group_id_to_dn_dictionary:
                 grp_dn = group_id_to_dn_dictionary[user_object.primary_group_id]
 
@@ -256,7 +256,19 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
                 temp_list_a.append(user_object.description)
                 _output_dictionary.append(temp_list_b)
 
-                user_information_file.write('\t'.join(temp_list_a[1:]) + '\n')
+                tmp_element = ""
+                for x, binary_string in enumerate(temp_list_a[1:]):
+                    binary_string = str(binary_string)
+                    if binary_string[:2] == "b'":
+                        binary_string = binary_string[2:]
+                    if binary_string[-1:] == "'":
+                        binary_string = binary_string[:-1]
+                    if x == len(temp_list_a[1:])-1 :
+                        tmp_element += binary_string + "\n"
+                    else:
+                        tmp_element += binary_string + "\t"
+                
+                user_information_file.write(tmp_element) #"\t".join(str(temp_list_a[1:])) + "\n")
 
     # Write Domain Computer Information
     computer_information_filename = '{0} Extended Domain Computer Information.tsv'.format(args.filename_prepend).strip()
@@ -266,7 +278,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
 
         # TODO: This could create output duplicates. It should be fixed at some point.
         # Add computers if they have the group set as their primary ID as the group
-        for computer_object in computers_dictionary.values():
+        for computer_object in list(computers_dictionary.values()):
             if computer_object.primary_group_id:
                 grp_dn = group_id_to_dn_dictionary[computer_object.primary_group_id]
 
@@ -282,7 +294,18 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
                 temp_list_b.append(computer_object.operating_system_service_pack)
                 temp_list_b.append(computer_object.operating_system_version)
 
-                computer_information_file.write('\t'.join(temp_list_b) + '\n')
+                tmp_element = ""
+                for x, binary_string in enumerate(temp_list_b):
+                    binary_string = str(binary_string)
+                    if binary_string[:2] == "b'":
+                        binary_string = binary_string[2:]
+                    if binary_string[-1:] == "'":
+                        binary_string = binary_string[:-1]
+                    if x == len(temp_list_b)-1 :
+                        tmp_element += binary_string + "\n"
+                    else:
+                        tmp_element += binary_string + "\t"
+                computer_information_file.write(tmp_element)
                 _output_dictionary.append(temp_list_a)
 
     # Write Group Memberships
@@ -292,7 +315,19 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
         group_membership_file.write('Group Name\tSAM Account Name\tStatus\n')
 
         for element in _output_dictionary:
-            group_membership_file.write('\t'.join(element) + '\n')
+            tmp_element = ""
+            for x, binary_string in enumerate(element):
+                binary_string = str(binary_string)
+                if binary_string[:2] == "b'":
+                    binary_string = binary_string[2:]
+                if binary_string[-1:] == "'":
+                    binary_string = binary_string[:-1]
+                if x == len(element)-1 :
+                    tmp_element += binary_string + "\n"
+                else:
+                    tmp_element += binary_string + "\t"
+                
+            group_membership_file.write(tmp_element)
 
 def process_group(users_dictionary, groups_dictionary, computers_dictionary, group_distinguished_name, explode_nested, base_group_name, groups_seen):
     """Builds group membership for a specified group."""
@@ -447,12 +482,12 @@ if __name__ == '__main__':
         else:
             fully_qualified_username = '{0}@{1}'.format(args.username, args.domain)
             ldap_client.simple_bind_s(fully_qualified_username, args.password)
-    except ldap.INVALID_CREDENTIALS, e:
+    except ldap.INVALID_CREDENTIALS as e:
         ldap_client.unbind()
         logging.error('Incorrect username or password')
         logging.debug(e)
         sys.exit(0)
-    except ldap.SERVER_DOWN, e:
+    except ldap.SERVER_DOWN as e:
         logging.error('LDAP server is unavailable')
         logging.debug(e)
         sys.exit(0)
