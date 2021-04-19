@@ -274,3 +274,7 @@ FakesAssemblies/
 **/*.Server/GeneratedArtifacts
 **/*.Server/ModelManifest.xml
 _Pvt_Extensions
+Extended Domain User Information.tsv
+ad-ldap-enum.py.bak
+Domain Group Membership.tsv
+Extended Domain Computer Information.tsv

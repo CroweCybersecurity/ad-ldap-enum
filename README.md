@@ -11,10 +11,11 @@ ad-ldap-enum supports both authenticated and unauthenticated LDAP connections. A
 ### Requirements
 The package [python-ldap](http://www.python-ldap.org/index.html) is required for the script to execute. This can be installed with the following command:
 ```
+sudo apt-get install libsasl2-dev libldap2-dev libssl-dev
 pip install python-ldap
 ````
 
-Additionally, this tools has been built and tested against Python v2.7.13 and python-ldap v2.4.20
+Additionally, this tools has been built and tested against Python v3.8.5 and python-ldap v3.2.0
 
 ### Usage
 ```
