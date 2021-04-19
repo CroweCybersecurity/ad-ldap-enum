@@ -551,8 +551,13 @@ if __name__ == '__main__':
     logging.debug('Using BaseDN of [%s]', base_dn)
 
     # Query LDAP
-    ldap_queries(ldap_client, base_dn, args.nested_groups)
-    ldap_client.unbind()
-
-    end_time = datetime.datetime.now()
-    logging.info('Elapsed Time [%s]', end_time - start_time)
+    try:
+        ldap_queries(ldap_client, base_dn, args.nested_groups)
+        ldap_client.unbind()
+    except ldap.OPERATIONS_ERROR as e:
+        logging.error('An operations error has occurred')
+        logging.debug(e)
+    finally:
+        end_time = datetime.datetime.now()
+        logging.info('Elapsed Time [%s]', end_time - start_time)
+        sys.exit(0)
