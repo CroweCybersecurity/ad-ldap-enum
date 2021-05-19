@@ -470,7 +470,7 @@ def get_membership_with_ranges(ldap_client, base_dn, group_dn):
     output_array = []
 
     # RFC 4515 sanitation.
-    sanatized_group_dn = group_dn.replace('(', '\\28').replace(')', '\\29').replace('*', '\\2a').replace('\\', '\\5c')
+    sanatized_group_dn = str(group_dn).replace('(', '\\28').replace(')', '\\29').replace('*', '\\2a').replace('\\', '\\5c')
 
     membership_filter = '(&(|(objectcategory=user)(objectcategory=group)(objectcategory=computer))(memberof={0}))'.format(sanatized_group_dn)
     membership_results = query_ldap_with_paging(ldap_client, base_dn, membership_filter, ['distinguishedName'])
