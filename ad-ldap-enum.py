@@ -103,7 +103,7 @@ class ADUser(object):
         return _output_string
 
     def get_password_last_set_date(self):
-        if (self.password_last_set != '') and (self.password_last_set != '0'):
+        if (self.password_last_set != '') and (self.password_last_set != '0') and (int(self.password_last_set) != 0):
             last_set_int = int(self.password_last_set)
             epoch_time = (last_set_int / 10000000) - 11644473600
             last_set_time = datetime.datetime.fromtimestamp(epoch_time)
@@ -112,7 +112,7 @@ class ADUser(object):
         return self.password_last_set
 
     def get_last_logon_date(self):
-        if (self.last_logon != '') and (self.last_logon != '0'):
+        if (self.last_logon != '') and (self.last_logon != '0') and (int(self.last_logon) != 0):
             last_logon_int = int(self.last_logon)
             epoch_time = (last_logon_int / 10000000) - 11644473600
             last_logon_time = datetime.datetime.fromtimestamp(epoch_time)
