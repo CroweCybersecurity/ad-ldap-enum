@@ -103,7 +103,7 @@ class ADUser(object):
         return _output_string
 
     def get_password_last_set_date(self):
-        if (self.password_last_set != '') and (self.password_last_set != '0'):
+        if (self.password_last_set != '') and (self.password_last_set != '0') and (int(self.password_last_set) != 0):
             last_set_int = int(self.password_last_set)
             epoch_time = (last_set_int / 10000000) - 11644473600
             last_set_time = datetime.datetime.fromtimestamp(epoch_time)
@@ -112,7 +112,7 @@ class ADUser(object):
         return self.password_last_set
 
     def get_last_logon_date(self):
-        if (self.last_logon != '') and (self.last_logon != '0'):
+        if (self.last_logon != '') and (self.last_logon != '0') and (int(self.last_logon) != 0):
             last_logon_int = int(self.last_logon)
             epoch_time = (last_logon_int / 10000000) - 11644473600
             last_logon_time = datetime.datetime.fromtimestamp(epoch_time)
@@ -470,7 +470,7 @@ def get_membership_with_ranges(ldap_client, base_dn, group_dn):
     output_array = []
 
     # RFC 4515 sanitation.
-    sanatized_group_dn = group_dn.replace('(', '\\28').replace(')', '\\29').replace('*', '\\2a').replace('\\', '\\5c')
+    sanatized_group_dn = str(group_dn).replace('(', '\\28').replace(')', '\\29').replace('*', '\\2a').replace('\\', '\\5c')
 
     membership_filter = '(&(|(objectcategory=user)(objectcategory=group)(objectcategory=computer))(memberof={0}))'.format(sanatized_group_dn)
     membership_results = query_ldap_with_paging(ldap_client, base_dn, membership_filter, ['distinguishedName'])
@@ -551,8 +551,13 @@ if __name__ == '__main__':
     logging.debug('Using BaseDN of [%s]', base_dn)
 
     # Query LDAP
-    ldap_queries(ldap_client, base_dn, args.nested_groups)
-    ldap_client.unbind()
-
-    end_time = datetime.datetime.now()
-    logging.info('Elapsed Time [%s]', end_time - start_time)
+    try:
+        ldap_queries(ldap_client, base_dn, args.nested_groups)
+        ldap_client.unbind()
+    except ldap.OPERATIONS_ERROR as e:
+        logging.error('An operations error has occurred')
+        logging.debug(e)
+    finally:
+        end_time = datetime.datetime.now()
+        logging.info('Elapsed Time [%s]', end_time - start_time)
+        sys.exit(0)
