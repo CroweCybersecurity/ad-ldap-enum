@@ -12,13 +12,12 @@
 
 import sys
 import ldap3
+from ldap3.utils.log import set_library_log_detail_level, OFF, BASIC, NETWORK, EXTENDED
 import datetime
 import logging
 import argparse
 import getpass
 import argcomplete
-
-from collections import deque
 
 class ADUser(object):
     '''A representation of a user in Active Directory. Class variables are instantiated to a 'safe'
@@ -71,6 +70,9 @@ class ADUser(object):
             self.logon_script = retrieved_attributes['scriptPath'][0]
         if 'userPassword' in retrieved_attributes:
             self.user_password = retrieved_attributes['userPassword'][0]
+    
+    def __str__(self):
+        return f"{self.sam_account_name}"
 
     def get_account_flags(self):
         _output_string = ''
@@ -133,6 +135,9 @@ class ADComputer(object):
     operating_system_service_pack = ''
     operating_system_version = ''
     service_principal_names = []
+    
+    def __str__(self):
+        return f"{self.sam_account_name}"
 
     def __init__(self, retrieved_attributes):
         if 'distinguishedName' in retrieved_attributes:
@@ -162,6 +167,9 @@ class ADGroup(object):
     members = []
     is_large_group = False
 
+    def __str__(self):
+        return f"{self.sam_account_name}"
+
     def __init__(self, retrieved_attributes):
         if 'distinguishedName' in retrieved_attributes:
             self.distinguished_name = retrieved_attributes['distinguishedName'][0]
@@ -182,13 +190,13 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
     group_id_to_dn_dictionary = {}
 
     # LDAP filters
-    user_filter = '(objectcategory=user)'
+    user_filter = 'objectcategory=user'
     user_attributes = ['distinguishedName', 'sAMAccountName', 'userAccountControl', 'primaryGroupID', 'comment', 'description', 'homeDirectory', 'displayName', 'mail', 'pwdLastSet', 'lastLogon', 'profilePath', 'lockoutTime', 'scriptPath', 'userPassword']
 
-    group_filter = '(objectcategory=group)'
+    group_filter = 'objectcategory=group'
     group_attributes = ['distinguishedName', 'sAMAccountName', 'member', 'primaryGroupToken']
 
-    computer_filters = '(objectcategory=computer)'
+    computer_filters = 'objectcategory=computer'
     computer_attributes = ['distinguishedName', 'sAMAccountName', 'primaryGroupID', 'operatingSystem', 'operatingSystemHotfix', 'operatingSystemServicePack', 'operatingSystemVersion', 'servicePrincipalName']
 
     # LDAP queries
@@ -390,12 +398,12 @@ def process_group(users_dictionary, groups_dictionary, computers_dictionary, gro
 
     return group_dictionary
 
-def query_ldap_with_paging(ldap_client, base_dn, search_filter, attributes, output_object=None, page_size=1000):
+def query_ldap_with_paging(ldap_client, base_dn, search_filter, attributes, page_size=1000):
     '''Get all the Active Directory results from LDAP using a paging approach.
        By default Active Directory will return 1,000 results per query before it errors out.'''
 
     # Paging for AD LDAP Queries
-    entry_list = ldap_client.search(search_base = base_dn, search_filter = search_filter, attributes = attributes, paged_size = page_size, generator=False)
+    entry_list = ldap_client.search(search_base = base_dn, search_filter = search_filter, search_scope = ldap3.SUBTREE, paged_criticality = True, time_limit = 30, attributes = attributes, paged_size = page_size, generator=False)
     for entry in entry_list:
         print(entry['attributes'])
     total_entries = len(entry_list)
@@ -460,7 +468,7 @@ def get_membership_with_ranges(ldap_client, base_dn, group_dn):
 
 if __name__ == '__main__':
     start_time = datetime.datetime.now()
-
+    set_library_log_detail_level(BASIC)
     # Print to stdout in addition to log
     console = logging.StreamHandler()
     console.setLevel(logging.DEBUG)
@@ -509,17 +517,17 @@ if __name__ == '__main__':
     try:
         # Connect to LDAP
         if args.secure_comm:
-            ldap_client = ldap3.Server(args.ldap_server, port = 636, use_ssl = True)
+            ldap_client = ldap3.Server(args.ldap_server, port = 636, use_ssl = True, mode = 'IP_SYSTEM_DEFAULT')
         else:
-            ldap_client = ldap3.Server(args.ldap_server, get_info=ldap3.ALL)
+            ldap_client = ldap3.Server(args.ldap_server, get_info=ldap3.ALL, mode = 'IP_SYSTEM_DEFAULT')
 
         logging.debug('Connecting to LDAP server at [%s]', ldap_client.address_info)
 
         # LDAP Authentication
         if args.null_session is True:
-            ldap_client = ldap3.Connection(ldap_client)
+            ldap_client = ldap3.Connection(ldap_client, read_only=True)
         else:
-            ldap_client = ldap3.Connection(ldap_client, user=base_dn, password=args.password)
+            ldap_client = ldap3.Connection(ldap_client, user='cn=' + args.username + ',cn=users,' + base_dn, password=args.password, read_only=True)
         ldap_client.bind()
     except ldap3.LDAPException as e:
         logging.error('An operations error has occurred')
