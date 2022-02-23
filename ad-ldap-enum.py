@@ -11,6 +11,7 @@
    The script supports null and authenticated Active Directory access.'''
 
 import sys
+import traceback
 import ldap3
 from ldap3.utils.log import set_library_log_detail_level, OFF, BASIC, NETWORK, EXTENDED
 import datetime
@@ -190,13 +191,13 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
     group_id_to_dn_dictionary = {}
 
     # LDAP filters
-    user_filter = 'objectcategory=user'
+    user_filter = '(objectcategory=user)'
     user_attributes = ['distinguishedName', 'sAMAccountName', 'userAccountControl', 'primaryGroupID', 'comment', 'description', 'homeDirectory', 'displayName', 'mail', 'pwdLastSet', 'lastLogon', 'profilePath', 'lockoutTime', 'scriptPath', 'userPassword']
 
-    group_filter = 'objectcategory=group'
+    group_filter = '(objectcategory=group)'
     group_attributes = ['distinguishedName', 'sAMAccountName', 'member', 'primaryGroupToken']
 
-    computer_filters = 'objectcategory=computer'
+    computer_filters = '(objectcategory=computer)'
     computer_attributes = ['distinguishedName', 'sAMAccountName', 'primaryGroupID', 'operatingSystem', 'operatingSystemHotfix', 'operatingSystemServicePack', 'operatingSystemVersion', 'servicePrincipalName']
 
     # LDAP queries
@@ -477,19 +478,26 @@ if __name__ == '__main__':
 
     # Command line arguments
     parser = argparse.ArgumentParser(description='Active Directory LDAP Enumerator')
+
+    method = parser.add_mutually_exclusive_group(required=True)
+    parser.add_argument('-s', '--secure', dest='secure_comm', action='store_true', help='Connect to LDAP over SSL')
+    parser.add_argument('-t', '--timeout', action='store_true', help='LDAP server timeout.')
+    parser.add_argument('-v', '--verbose', dest='verbosity', action='store_true', help='Display debugging information.')
+    method.add_argument('-n', '--null', dest='null_session', action='store_true', help='Use a null binding to authenticate to LDAP.')
+    method.add_argument('-u', '--username', help='Authentication account\'s username.')
+    method.add_argument('-dn', '--distinguished_name', help='Authentication account\'s distinguished name')
+    parser.add_argument('-p', '--password', help='Authentication account\'s password.')
+    parser.add_argument('-P', '--prompt', dest='password_prompt', action='store_true', help='Prompt for the authentication account\'s password.')
+    parser.add_argument('-o', '--prepend', dest='filename_prepend', default='', help='Prepend a string to all output file names\' CSV.')
+    
     server_group = parser.add_argument_group('Server Parameters')
     server_group.add_argument('-l', '--server', required=True, dest='ldap_server', help='IP address of the LDAP server.')
-    server_group.add_argument('-d', '--domain', required=True, dest='domain', help='Authentication account\'s FQDN. If an alternative domain is not specified this will be also used as the Base DN for searching LDAP.')
+    server_group.add_argument('--port', type=int, help='TCP port of the LDAP server.')
+    server_group.add_argument('-d', '--domain', required=True, help='Authentication account\'s FQDN. If an alternative domain is not specified this will be also used as the Base DN for searching LDAP.')
     server_group.add_argument('-a', '--alt-domain', dest='alt_domain', help='Alternative FQDN to use as the Base DN for searching LDAP.')
     server_group.add_argument('-e', '--nested', dest='nested_groups', action='store_true', help='Expand nested groups.')
-    authentication_group = parser.add_argument_group('Authentication Parameters')
-    authentication_group.add_argument('-n', '--null', dest='null_session', action='store_true', help='Use a null binding to authenticate to LDAP.')
-    authentication_group.add_argument('-s', '--secure', dest='secure_comm', action='store_true', help='Connect to LDAP over SSL')
-    authentication_group.add_argument('-u', '--username', dest='username', help='Authentication account\'s username.')
-    authentication_group.add_argument('-p', '--password', dest='password', help='Authentication account\'s password.')
-    authentication_group.add_argument('-P', '--prompt', dest='password_prompt', action='store_true', help='Prompt for the authentication account\'s password.')    
-    parser.add_argument('-v', '--verbose', dest='verbosity', action='store_true', help='Display debugging information.')
-    parser.add_argument('-o', '--prepend', dest='filename_prepend', default='', help='Prepend a string to all output file names.')
+    
+
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
 
@@ -506,31 +514,41 @@ if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)-19s %(levelname)-8s %(message)s', datefmt='%Y-%m-%d %H:%M:%S', level=logLevel)
 
     # Build the baseDN
-    if args.alt_domain:
-        formatted_domain_name = args.alt_domain.replace('.', ',dc=')
-    else:
-        formatted_domain_name = args.domain.replace('.', ',dc=')
+    if not args.distinguished_name:
+        if args.alt_domain:
+            formatted_domain_name = args.alt_domain.replace('.', ',dc=')
+        else:
+            formatted_domain_name = args.domain.replace('.', ',dc=')
 
-    base_dn = 'dc={0}'.format(formatted_domain_name)
+        base_dn = 'dc={0}'.format(formatted_domain_name)
+    else:
+        base_dn = args.distinguished_name
     logging.debug('Using BaseDN of [%s]', base_dn)
 
     try:
         # Connect to LDAP
         if args.secure_comm:
-            ldap_client = ldap3.Server(args.ldap_server, port = 636, use_ssl = True, mode = 'IP_SYSTEM_DEFAULT')
+            if not args.port:
+                args.port = 636
+            ldap_client = ldap3.Server(args.ldap_server, port = args.port, use_ssl = True, mode = 'IP_SYSTEM_DEFAULT')
         else:
-            ldap_client = ldap3.Server(args.ldap_server, get_info=ldap3.ALL, mode = 'IP_SYSTEM_DEFAULT')
+            if not args.port:
+                args.port = 389
+            ldap_client = ldap3.Server(args.ldap_server, port = args.port, get_info=ldap3.ALL, mode = 'IP_SYSTEM_DEFAULT')
 
         logging.debug('Connecting to LDAP server at [%s]', ldap_client.address_info)
 
         # LDAP Authentication
         if args.null_session is True:
-            ldap_client = ldap3.Connection(ldap_client, read_only=True)
+            ldap_client = ldap3.Connection(ldap_client, read_only=True, raise_exceptions=True)
+        elif args.distinguished_name:
+            ldap_client = ldap3.Connection(ldap_client, user=args.distinguished_name, password=args.password, read_only=True, raise_exceptions=True)
         else:
-            ldap_client = ldap3.Connection(ldap_client, user='cn=' + args.username + ',cn=users,' + base_dn, password=args.password, read_only=True)
+            ldap_client = ldap3.Connection(ldap_client, user='cn=' + args.username + ',cn=users,' + base_dn, password=args.password, read_only=True, raise_exceptions=True)
         ldap_client.bind()
-    except ldap3.LDAPException as e:
+    except Exception as e:
         logging.error('An operations error has occurred')
+        print(traceback.format_exc())
         logging.debug(e)
         sys.exit(0)
 
@@ -538,8 +556,9 @@ if __name__ == '__main__':
     try:
         ldap_queries(ldap_client, base_dn, args.nested_groups)
         ldap_client.unbind()
-    except ldap3.LDAPException as e:
+    except Exception as e:
         logging.error('An operations error has occurred')
+        print(traceback.format_exc())
         logging.debug(e)
     finally:
         end_time = datetime.datetime.now()
