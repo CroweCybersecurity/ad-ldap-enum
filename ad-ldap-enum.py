@@ -399,18 +399,31 @@ def process_group(users_dictionary, groups_dictionary, computers_dictionary, gro
 
     return group_dictionary
 
-def query_ldap_with_paging(ldap_client, base_dn, search_filter, attributes, page_size=1000):
+def query_ldap_with_paging(ldap_client, base_dn, search_filter_custom, attributes, page_size=1000):
     '''Get all the Active Directory results from LDAP using a paging approach.
        By default Active Directory will return 1,000 results per query before it errors out.'''
 
     # Paging for AD LDAP Queries
-    entry_list = ldap_client.search(search_base = base_dn, search_filter = search_filter, search_scope = ldap3.SUBTREE, paged_criticality = True, time_limit = 30, attributes = attributes, paged_size = page_size, generator=False)
-    for entry in entry_list:
-        print(entry['attributes'])
-    total_entries = len(entry_list)
+    total_entries = 0
+    ldap_client.search(search_base = base_dn, search_filter = search_filter_custom, search_scope = ldap3.SUBTREE, paged_criticality = True, time_limit = 30, attributes = attributes, paged_size = page_size)
+    total_entries += len(ldap_client.response)
+    for entry in ldap_client.response:
+        print(entry['dn'], entry['attributes'])
+    cookie = ldap_client.result['controls']['1.2.840.113556.1.4.319']['value']['cookie']
+    while cookie:
+        ldap_client.search(search_base = base_dn,
+                search_filter = search_filter_custom,
+                search_scope = ldap3.SUBTREE,
+                attributes = attributes,
+                paged_size = page_size,
+                paged_cookie = cookie)
+        total_entries += len(ldap_client.response)
+        cookie = ldap_client.result['controls']['1.2.840.113556.1.4.319']['value']['cookie']
+        for entry in ldap_client.response:
+            print(entry['dn'], entry['attributes'])
     print('Total entries retrieved:', total_entries)
 
-    return entry_list
+    return ldap_client.response
 
 def parse_spns(service_principle_names):
     temp_sql_spns = []
