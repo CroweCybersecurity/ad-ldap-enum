@@ -40,23 +40,37 @@ class ADUser(object):
     logon_script = ''
     user_password = ''
 
-    def __init__(self):
-        self.distinguished_name = self.entry_dn
-        self.sam_account_name = self.entry_attributes_as_dict.get('sAMAccountName')[0]
-        self.user_account_control = self.entry_attributes_as_dict.get('userAccountControl')[0]
-        self.primary_group_id = self.entry_attributes_as_dict.get('primaryGroupID')[0]
-        self.comment = self.entry_attributes_as_dict.get('comment')[0].replace('\t', '*TAB*').replace('\r', '*CR*').replace('\n', '*LF*')
-        self.description = self.entry_attributes_as_dict.get('description')[0].replace('\t', '*TAB*').replace('\r', '*CR*').replace('\n', '*LF*')
-        self.homeDirectory = self.entry_attributes_as_dict.get('homeDirectory')[0]
-        self.display_name = self.entry_attributes_as_dict.get('display_name')[0]
-        self.mail = self.entry_attributes_as_dict.get('mail')[0]
-        self.pwdLastSet = self.entry_attributes_as_dict.get('pwdLastSet')[0]
-        self.last_logon = self.entry_attributes_as_dict.get('last_logon')[0]
-        self.profile_path = self.entry_attributes_as_dict.get('profile_path')[0]
-        if self.entry_attributes_as_dict.get('')[0] != '0':
+    def __init__(self, retrieved_attributes):
+        if 'distinguishedName' in retrieved_attributes:
+            self.distinguished_name = retrieved_attributes['distinguishedName'][0]
+        if 'sAMAccountName' in retrieved_attributes:
+            self.sam_account_name = retrieved_attributes['sAMAccountName'][0]
+        if 'userAccountControl' in retrieved_attributes:
+            self.user_account_control = retrieved_attributes['userAccountControl'][0]
+        if 'primaryGroupID' in retrieved_attributes:
+            self.primary_group_id = retrieved_attributes['primaryGroupID'][0]
+        if 'comment' in retrieved_attributes:
+            self.comment = str(retrieved_attributes['comment'][0]).replace("\t", '*TAB*').replace("\r", '*CR*').replace("\n", '*LF*')
+        if 'description' in retrieved_attributes:
+            self.description = str(retrieved_attributes['description'][0]).replace("\t", '*TAB*').replace("\r", '*CR*').replace("\n", '*LF*')
+        if 'homeDirectory' in retrieved_attributes:
+            self.home_directory = retrieved_attributes['homeDirectory'][0]
+        if 'displayName' in retrieved_attributes:
+            self.display_name = retrieved_attributes['displayName'][0]
+        if 'mail' in retrieved_attributes:
+            self.mail = retrieved_attributes['mail'][0]
+        if 'pwdLastSet' in retrieved_attributes:
+            self.password_last_set = retrieved_attributes['pwdLastSet'][0]
+        if 'lastLogon' in retrieved_attributes:
+            self.last_logon = retrieved_attributes['lastLogon'][0]
+        if 'profilePath' in retrieved_attributes:
+            self.profile_path = retrieved_attributes['profilePath'][0]
+        if 'lockoutTime' in retrieved_attributes and retrieved_attributes['lockoutTime'][0] != '0':
             self.locked_out = 'YES'
-        self.scriptPath = self.entry_attributes_as_dict.get('scriptPath')[0]
-        self.userPassword = self.entry_attributes_as_dict.get('userPassword')[0]
+        if 'scriptPath' in retrieved_attributes:
+            self.logon_script = retrieved_attributes['scriptPath'][0]
+        if 'userPassword' in retrieved_attributes:
+            self.user_password = retrieved_attributes['userPassword'][0]
     
     def __str__(self):
         return f"{self.sam_account_name}"
@@ -203,7 +217,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
         group_id_to_dn_dictionary[element.entry_attributes_as_dict.get('primaryGroupToken')[0]] = element.entry_dn
         groups_dictionary[element.entry_dn] = element
     #print(groups_dictionary.keys())
-    print(groups_dictionary.items())
+    #print(groups_dictionary.items())
 
     print('[-] Building computers dictionary...')
     for element in computers:
@@ -415,10 +429,11 @@ def query_ldap_with_paging(ldap_client, base_dn, search_filter_custom, attribute
 
     # Append Page to Results
     for element in ldap_client.entries:
+        print(element.entry_raw_attributes)
         if not output_object:
-            output_list.append(element.entry_raw_attributes())
+            output_list.append(element.entry_raw_attributes)
         else:
-            output_list.append(output_object(element.entry_raw_attributes()))
+            output_list.append(output_object(element.entry_raw_attributes))
 
     return output_list
 
