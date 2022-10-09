@@ -40,37 +40,23 @@ class ADUser(object):
     logon_script = ''
     user_password = ''
 
-    def __init__(self, retrieved_attributes):
-        if 'entry_dn' in retrieved_attributes:
-            self.distinguished_name = retrieved_attributes['entry_dn'][0]
-        if 'sAMAccountName' in retrieved_attributes:
-            self.sam_account_name = retrieved_attributes['sAMAccountName'][0]
-        if 'userAccountControl' in retrieved_attributes:
-            self.user_account_control = retrieved_attributes['userAccountControl'][0]
-        if 'primaryGroupID' in retrieved_attributes:
-            self.primary_group_id = retrieved_attributes['primaryGroupID'][0]
-        if 'comment' in retrieved_attributes:
-            self.comment = str(retrieved_attributes['comment'][0]).replace('\t', '*TAB*').replace('\r', '*CR*').replace('\n', '*LF*')
-        if 'description' in retrieved_attributes:
-            self.description = str(retrieved_attributes['description'][0]).replace('\t', '*TAB*').replace('\r', '*CR*').replace('\n', '*LF*')
-        if 'homeDirectory' in retrieved_attributes:
-            self.home_directory = retrieved_attributes['homeDirectory'][0]
-        if 'displayName' in retrieved_attributes:
-            self.display_name = retrieved_attributes['displayName'][0]
-        if 'mail' in retrieved_attributes:
-            self.mail = retrieved_attributes['mail'][0]
-        if 'pwdLastSet' in retrieved_attributes:
-            self.password_last_set = retrieved_attributes['pwdLastSet'][0]
-        if 'lastLogon' in retrieved_attributes:
-            self.last_logon = retrieved_attributes['lastLogon'][0]
-        if 'profilePath' in retrieved_attributes:
-            self.profile_path = retrieved_attributes['profilePath'][0]
-        if 'lockoutTime' in retrieved_attributes and retrieved_attributes['lockoutTime'][0] != '0':
+    def __init__(self):
+        self.distinguished_name = self.entry_dn
+        self.sam_account_name = self.entry_attributes_as_dict.get('sAMAccountName')[0]
+        self.user_account_control = self.entry_attributes_as_dict.get('userAccountControl')[0]
+        self.primary_group_id = self.entry_attributes_as_dict.get('primaryGroupID')[0]
+        self.comment = self.entry_attributes_as_dict.get('comment')[0].replace('\t', '*TAB*').replace('\r', '*CR*').replace('\n', '*LF*')
+        self.description = self.entry_attributes_as_dict.get('description')[0].replace('\t', '*TAB*').replace('\r', '*CR*').replace('\n', '*LF*')
+        self.homeDirectory = self.entry_attributes_as_dict.get('homeDirectory')[0]
+        self.display_name = self.entry_attributes_as_dict.get('display_name')[0]
+        self.mail = self.entry_attributes_as_dict.get('mail')[0]
+        self.pwdLastSet = self.entry_attributes_as_dict.get('pwdLastSet')[0]
+        self.last_logon = self.entry_attributes_as_dict.get('last_logon')[0]
+        self.profile_path = self.entry_attributes_as_dict.get('profile_path')[0]
+        if self.entry_attributes_as_dict.get('')[0] != '0':
             self.locked_out = 'YES'
-        if 'scriptPath' in retrieved_attributes:
-            self.logon_script = retrieved_attributes['scriptPath'][0]
-        if 'userPassword' in retrieved_attributes:
-            self.user_password = retrieved_attributes['userPassword'][0]
+        self.scriptPath = self.entry_attributes_as_dict.get('scriptPath')[0]
+        self.userPassword = self.entry_attributes_as_dict.get('userPassword')[0]
     
     def __str__(self):
         return f"{self.sam_account_name}"
@@ -209,15 +195,20 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
     print('[-] Building users dictionary...')
     for element in users:
         users_dictionary[element.entry_dn] = element
+    #print(users_dictionary.keys())
 
     print('[-] Building groups dictionary...')
     for element in groups:
-        group_id_to_dn_dictionary[element.entry_attributes_as_dict['primaryGroupToken'][0]] = element.entry_dn
+        #print(element.entry_attributes_as_dict.get('primaryGroupToken')[0])
+        group_id_to_dn_dictionary[element.entry_attributes_as_dict.get('primaryGroupToken')[0]] = element.entry_dn
         groups_dictionary[element.entry_dn] = element
+    #print(groups_dictionary.keys())
+    print(groups_dictionary.items())
 
     print('[-] Building computers dictionary...')
     for element in computers:
         computers_dictionary[element.entry_dn] = element
+    #print(computers_dictionary.keys())
 
     # Loop through each group. If the membership is a range, then query AD to get the full group membership
     print('[-] Exploding large groups...')
@@ -394,19 +385,19 @@ def process_group(users_dictionary, groups_dictionary, computers_dictionary, gro
 
     return group_dictionary
 
-def query_ldap_with_paging(ldap_client, base_dn, search_filter_custom, attributes, page_size=1000):
+def query_ldap_with_paging(ldap_client, base_dn, search_filter_custom, attributes, output_object=None, page_size=1000):
     '''Get all the Active Directory results from LDAP using a paging approach.
        By default Active Directory will return 1,000 results per query before it errors out.'''
 
     # Paging for AD LDAP Queries
     total_entries = 0
+    output_list= []
+    #TODO: Add time_limit as argument
     ldap_client.search(search_base = base_dn, search_filter = search_filter_custom, search_scope = ldap3.SUBTREE, paged_criticality = True, time_limit = 30, attributes = attributes, paged_size = page_size)
     total_entries += len(ldap_client.entries)
-    for entry in ldap_client.entries:
+    #for entry in ldap_client.entries:
         #print(entry.entry_dn)
-        #print(entry.entry_attributes_as_dict['sAMAccountName'])
-        #print(entry.entry_attributes_as_dict['sAMAccountName'][0])
-        print(entry)
+        #print(entry)
     if total_entries > 1000:
         cookie = ldap_client.result['controls']['1.2.840.113556.1.4.319']['value']['cookie']
         while cookie:
@@ -422,7 +413,14 @@ def query_ldap_with_paging(ldap_client, base_dn, search_filter_custom, attribute
                 print(entry['dn'], entry['attributes'])
     print('[i] Total entries retrieved:', total_entries)
 
-    return ldap_client.entries
+    # Append Page to Results
+    for element in ldap_client.entries:
+        if not output_object:
+            output_list.append(element.entry_raw_attributes())
+        else:
+            output_list.append(output_object(element.entry_raw_attributes()))
+
+    return output_list
 
 def parse_spns(service_principle_names):
     temp_sql_spns = []
@@ -468,7 +466,10 @@ def get_membership(ldap_client, base_dn, group_dn):
        processing is needed to get the full membership.'''
     members_list = []
 
-    membership_filter = '(&(|(objectcategory=user)(objectcategory=group)(objectcategory=computer))(memberOf={0}))'.format(group_dn)
+     # RFC 4515 sanitation.
+    sanitized_group_dn = str(group_dn).replace('(', '\\28').replace(')', '\\29').replace('*', '\\2a').replace('\\', '\\5c')
+
+    membership_filter = '(&(|(objectcategory=user)(objectcategory=group)(objectcategory=computer))(memberOf={0}))'.format(sanitized_group_dn)
     membership_results = query_ldap_with_paging(ldap_client, base_dn, membership_filter, ['distinguishedName'])
 
     for element in membership_results:
@@ -482,7 +483,7 @@ if __name__ == '__main__':
 
     method = parser.add_mutually_exclusive_group(required=True)
     parser.add_argument('-s', '--secure', dest='secure_comm', action='store_true', help='Connect to LDAP over SSL')
-    parser.add_argument('-t', '--timeout', action='store_true', help='LDAP server timeout.')
+    parser.add_argument('-t', '--timeout', type=int, default=10, help='LDAP server timeout in seconds')
     parser.add_argument('--verbosity', default='ERROR', choices=['OFF', 'ERROR', 'BASIC', 'PROTOCOL', 'NETWORK', 'EXTENDED'], help='Log file LDAP verbosity level')
     parser.add_argument('-lf', '--log_file', help='Log text file path')
     method.add_argument('-n', '--null', dest='null_session', action='store_true', help='Use a null binding to authenticate to LDAP.')
@@ -504,7 +505,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
    # If --prompt then overwrite args.password now
-    if args.password_prompt is True:
+    if args.password_prompt is True or (not args.password and not args.null_session):
         args.password = getpass()
 
     # Set Logger format
@@ -549,21 +550,21 @@ if __name__ == '__main__':
         if args.secure_comm:
             if not args.port:
                 args.port = 636
-            ldap_client = ldap3.Server(args.ldap_server, port = args.port, use_ssl = True, mode = 'IP_SYSTEM_DEFAULT')
+            ldap_client = ldap3.Server(args.ldap_server, port = args.port, use_ssl = True, get_info=ldap3.ALL, mode = 'IP_V4_PREFERRED', connect_timeout=args.timeout)
         else:
             if not args.port:
                 args.port = 389
-            ldap_client = ldap3.Server(args.ldap_server, port = args.port, get_info=ldap3.ALL, mode = 'IP_SYSTEM_DEFAULT')
+            ldap_client = ldap3.Server(args.ldap_server, port = args.port, get_info=ldap3.ALL, mode = 'IP_V4_PREFERRED', connect_timeout=args.timeout)
 
         print('[i] Connecting to LDAP server at "%s:%i"...' % (args.ldap_server, args.port))
 
         # LDAP Authentication
         if args.null_session is True:
-            ldap_client = ldap3.Connection(ldap_client, read_only=True, raise_exceptions=True)
+            ldap_client = ldap3.Connection(ldap_client, read_only=True, raise_exceptions=True, receive_timeout=args.timeout, auto_range=True)
         elif args.distinguished_name:
-            ldap_client = ldap3.Connection(ldap_client, user=args.distinguished_name, password=args.password, read_only=True, raise_exceptions=True)
+            ldap_client = ldap3.Connection(ldap_client, user=args.distinguished_name, password=args.password, read_only=True, raise_exceptions=True, receive_timeout=args.timeout, auto_range=True)
         else:
-            ldap_client = ldap3.Connection(ldap_client, user=args.domain + '\\' + args.username, password=args.password, read_only=True, raise_exceptions=True, authentication=ldap3.NTLM)
+            ldap_client = ldap3.Connection(ldap_client, user=args.domain + '\\' + args.username, password=args.password, read_only=True, raise_exceptions=True, authentication=ldap3.NTLM, receive_timeout=args.timeout, auto_range=True)
         ldap_client.bind()
     except ldap3.core.exceptions.LDAPOperationsErrorResult as e:
         if 'perform this operation a successful bind' in str(e):
