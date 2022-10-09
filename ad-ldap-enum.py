@@ -141,8 +141,8 @@ class ADComputer(object):
         return f"{self.sam_account_name}"
 
     def __init__(self, retrieved_attributes):
-        if 'entry_dn' in retrieved_attributes:
-            self.distinguished_name = retrieved_attributes['entry_dn'][0]
+        if 'distinguishedName' in retrieved_attributes:
+            self.distinguished_name = retrieved_attributes['distinguishedName'][0]
         if 'sAMAccountName' in retrieved_attributes:
             self.sam_account_name = retrieved_attributes['sAMAccountName'][0]
         if 'primaryGroupID' in retrieved_attributes:
@@ -171,8 +171,8 @@ class ADGroup(object):
         return f"{self.sam_account_name}"
 
     def __init__(self, retrieved_attributes):
-        if 'entry_dn' in retrieved_attributes:
-            self.distinguished_name = retrieved_attributes['entry_dn'][0]
+        if 'distinguishedName' in retrieved_attributes:
+            self.distinguished_name = retrieved_attributes['distinguishedName'][0]
         if 'sAMAccountName' in retrieved_attributes:
             self.sam_account_name = retrieved_attributes['sAMAccountName'][0]
         if 'primaryGroupToken' in retrieved_attributes:
@@ -208,20 +208,20 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
     # LDAP dictionaries
     print('[-] Building users dictionary...')
     for element in users:
-        users_dictionary[element.entry_dn] = element
+        users_dictionary[element.distinguished_name] = element
     #print(users_dictionary.keys())
 
     print('[-] Building groups dictionary...')
     for element in groups:
         #print(element.entry_attributes_as_dict.get('primaryGroupToken')[0])
-        group_id_to_dn_dictionary[element.entry_attributes_as_dict.get('primaryGroupToken')[0]] = element.entry_dn
-        groups_dictionary[element.entry_dn] = element
+        group_id_to_dn_dictionary[element.primary_group_token] = element.distinguished_name
+        groups_dictionary[element.distinguished_name] = element
     #print(groups_dictionary.keys())
     #print(groups_dictionary.items())
 
     print('[-] Building computers dictionary...')
     for element in computers:
-        computers_dictionary[element.entry_dn] = element
+        computers_dictionary[element.distinguished_name] = element
     #print(computers_dictionary.keys())
 
     # Loop through each group. If the membership is a range, then query AD to get the full group membership
@@ -410,7 +410,6 @@ def query_ldap_with_paging(ldap_client, base_dn, search_filter_custom, attribute
     ldap_client.search(search_base = base_dn, search_filter = search_filter_custom, search_scope = ldap3.SUBTREE, paged_criticality = True, time_limit = 30, attributes = attributes, paged_size = page_size)
     total_entries += len(ldap_client.entries)
     #for entry in ldap_client.entries:
-        #print(entry.entry_dn)
         #print(entry)
     if total_entries > 1000:
         cookie = ldap_client.result['controls']['1.2.840.113556.1.4.319']['value']['cookie']
@@ -429,8 +428,8 @@ def query_ldap_with_paging(ldap_client, base_dn, search_filter_custom, attribute
 
     # Append Page to Results
     for element in ldap_client.entries:
-        print(element.entry_raw_attributes)
-        if not output_object:
+        #print(element.entry_raw_attributes)
+        if output_object is None:
             output_list.append(element.entry_raw_attributes)
         else:
             output_list.append(output_object(element.entry_raw_attributes))
@@ -575,11 +574,11 @@ if __name__ == '__main__':
 
         # LDAP Authentication
         if args.null_session is True:
-            ldap_client = ldap3.Connection(ldap_client, read_only=True, raise_exceptions=True, receive_timeout=args.timeout, auto_range=True)
+            ldap_client = ldap3.Connection(ldap_client, read_only=True, raise_exceptions=True, receive_timeout=args.timeout, auto_range=True, return_empty_attributes=False)
         elif args.distinguished_name:
-            ldap_client = ldap3.Connection(ldap_client, user=args.distinguished_name, password=args.password, read_only=True, raise_exceptions=True, receive_timeout=args.timeout, auto_range=True)
+            ldap_client = ldap3.Connection(ldap_client, user=args.distinguished_name, password=args.password, read_only=True, raise_exceptions=True, receive_timeout=args.timeout, auto_range=True, return_empty_attributes=False)
         else:
-            ldap_client = ldap3.Connection(ldap_client, user=args.domain + '\\' + args.username, password=args.password, read_only=True, raise_exceptions=True, authentication=ldap3.NTLM, receive_timeout=args.timeout, auto_range=True)
+            ldap_client = ldap3.Connection(ldap_client, user=args.domain + '\\' + args.username, password=args.password, read_only=True, raise_exceptions=True, authentication=ldap3.NTLM, receive_timeout=args.timeout, auto_range=True, return_empty_attributes=False)
         ldap_client.bind()
     except ldap3.core.exceptions.LDAPOperationsErrorResult as e:
         if 'perform this operation a successful bind' in str(e):
