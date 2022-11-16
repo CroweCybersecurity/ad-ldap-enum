@@ -184,18 +184,12 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
     # LDAP filters
     user_filter = '(objectcategory=user)'
     user_attributes = ['distinguishedName', 'sAMAccountName', 'userAccountControl', 'primaryGroupID', 'comment', 'description', 'homeDirectory', 'displayName', 'mail', 'pwdLastSet', 'lastLogon', 'profilePath', 'lockoutTime', 'scriptPath', 'userPassword']
-    if legacy: # Remove distinguishedName as it was not in the original
-        user_attributes.pop(0)
 
     group_filter = '(objectcategory=group)'
     group_attributes = ['distinguishedName', 'sAMAccountName', 'member', 'primaryGroupToken']
-    if legacy: # Remove distinguishedName as it was not in the original
-        user_attributes.pop(0)
 
     computer_filters = '(objectcategory=computer)'
     computer_attributes = ['distinguishedName', 'sAMAccountName', 'primaryGroupID', 'operatingSystem', 'operatingSystemHotfix', 'operatingSystemServicePack', 'operatingSystemVersion', 'servicePrincipalName']
-    if legacy: # Remove distinguishedName as it was not in the original
-        user_attributes.pop(0)
 
     # LDAP queries
     print('[-] Querying users...')
@@ -240,7 +234,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
     _output_dictionary = []
     for grp in list(groups_dictionary.keys()):
         current_group_number += 1
-        _output_dictionary += process_group(users_dictionary, groups_dictionary, computers_dictionary, grp, explode_nested_groups, None, [])
+        _output_dictionary += process_group(users_dictionary, groups_dictionary, computers_dictionary, grp, explode_nested_groups, None, [], legacy)
 
         if current_group_number % 1000 == 0:
             print('[-] Processing group %i...' % current_group_number)
@@ -273,7 +267,8 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
                 temp_list_a.append(user_object.get_account_flags())
                 temp_list_b.append(user_object.get_account_flags())
                 temp_list_a.append(user_object.locked_out)
-                temp_list_a.append(user_object.distinguished_name)
+                if not legacy:
+                    temp_list_a.append(user_object.distinguished_name)
                 temp_list_a.append(user_object.user_password)
                 temp_list_a.append(user_object.display_name)
                 temp_list_a.append(user_object.mail)
@@ -335,7 +330,8 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
                 temp_list_b.append(computer_object.operating_system_hotfix)
                 temp_list_b.append(computer_object.operating_system_service_pack)
                 temp_list_b.append(computer_object.operating_system_version)
-                temp_list_b.append(computer_object.distinguished_name)
+                if not legacy:
+                    temp_list_b.append(computer_object.distinguished_name)
                 [temp_list_b.append(','.join(map(str, item))) for item in parse_spns(computer_object.service_principal_names)]
 
                 tmp_element = ''
@@ -390,7 +386,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
                 
             group_membership_file.write(tmp_element)
 
-def process_group(users_dictionary, groups_dictionary, computers_dictionary, group_distinguished_name, explode_nested_bool, base_group_name, groups_seen):
+def process_group(users_dictionary, groups_dictionary, computers_dictionary, group_distinguished_name, explode_nested_bool, base_group_name, groups_seen, legacy):
     '''Builds group membership for a specified group.'''
     # Store assorted group information.
     group_dictionary = []
@@ -404,6 +400,8 @@ def process_group(users_dictionary, groups_dictionary, computers_dictionary, gro
     # Add empty groups to the Domain Group Membership list for full visibility.
     if not groups_dictionary[group_distinguished_name].members:
         temp_list = [group_sam_name, '', '', group_distinguished_name]
+        if legacy:
+            temp_list.pop(-1)
         group_dictionary.append(temp_list)
 
     # Add users/groups/computer if they are a 'memberOf' the group
@@ -412,17 +410,23 @@ def process_group(users_dictionary, groups_dictionary, computers_dictionary, gro
         if member in users_dictionary:
             user_member = users_dictionary[member]
             temp_list = [group_sam_name, user_member.sam_account_name, user_member.get_account_flags(), group_distinguished_name]
+            if legacy:
+                temp_list.pop(-1)
             group_dictionary.append(temp_list)
 
         # Process computers.
         elif member in computers_dictionary:
             temp_list = [group_sam_name, computers_dictionary[member].sam_account_name, '', group_distinguished_name]
+            if legacy:
+                temp_list.pop(-1)
             group_dictionary.append(temp_list)
 
         # Process groups.
         elif member in groups_dictionary:
             if not explode_nested_bool or (explode_nested_bool and base_group_name is None):
                 temp_list = [group_sam_name, groups_dictionary[member].sam_account_name, '', group_distinguished_name]
+                if legacy:
+                    temp_list.pop(-1)
                 group_dictionary.append(temp_list)
 
             if explode_nested_bool:
@@ -432,7 +436,7 @@ def process_group(users_dictionary, groups_dictionary, computers_dictionary, gro
                 # Process a nested group.
                 else:
                     groups_seen.append(member)
-                    group_dictionary += process_group(users_dictionary, groups_dictionary, computers_dictionary, member, True, group_sam_name, groups_seen)
+                    group_dictionary += process_group(users_dictionary, groups_dictionary, computers_dictionary, member, True, group_sam_name, groups_seen, legacy)
 
     return group_dictionary
 
