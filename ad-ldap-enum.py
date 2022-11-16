@@ -257,7 +257,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
         if not legacy:
             user_information_file.write('SAM Account Name,Status,Locked Out,Distinguished Name,User Password,Display Name,Email,Home Directory,Profile Path,Logon Script Path,Password Last Set,Last Logon,User Comment,Description\n')
         else:
-            user_information_file.write('SAM Account NameStatus\tLocked Out\tDistinguished Name\tUser Password\tDisplay Name\tEmail\tHome Directory\tProfile Path\tLogon Script Path\tPassword Last Set\tLast Logon\tUser Comment\tDescription\n')
+            user_information_file.write('SAM Account NameStatus\tLocked Out\tUser Password\tDisplay Name\tEmail\tHome Directory\tProfile Path\tLogon Script Path\tPassword Last Set\tLast Logon\tUser Comment\tDescription\n')
 
         for user_object in list(users_dictionary.values()):
             if user_object.primary_group_id and user_object.primary_group_id in group_id_to_dn_dictionary:
@@ -293,6 +293,8 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
                         binary_string = binary_string[2:]
                     if binary_string[-1:] == "'":
                         binary_string = binary_string[:-1]
+                    if legacy and 'dc=' in binary_string.lower(): # Skip distinguishedName
+                        continue
                     if not legacy and ',' in binary_string:
                         binary_string = '"' + binary_string + '"'
                     if x == len(temp_list_a[1:])-1 :
@@ -313,7 +315,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
         if not legacy:
             computer_information_file.write('SAM Account Name,OS,OS Hotfix,OS Service Pack,OS Version,Distinguished Name,SQL SPNs,RA SPNS,Share SPNs,Mail SPNs,Auth SPNs,Backup SPNs,Management SPNs,Other SPNs\n')
         else:
-            computer_information_file.write('SAM Account Name\tOS\tOS Hotfix\tOS Service Pack\tOS Version\tDistinguished Name\tSQL SPNs\tRA SPNS\tShare SPNs\tMail SPNs\tAuth SPNs\tBackup SPNs\tManagement SPNs\tOther SPNs\n')
+            computer_information_file.write('SAM Account Name\tOS\tOS Hotfix\tOS Service Pack\tOS Version\tSQL SPNs\tRA SPNS\tShare SPNs\tMail SPNs\tAuth SPNs\tBackup SPNs\tManagement SPNs\tOther SPNs\n')
 
 
         # TODO: This could create output duplicates. It should be fixed at some point.
@@ -343,6 +345,8 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
                         binary_string = binary_string[2:]
                     if binary_string[-1:] == "'":
                         binary_string = binary_string[:-1]
+                    if legacy and 'dc=' in binary_string.lower(): # Skip distinguishedName
+                        continue
                     if not legacy and ',' in binary_string:
                         binary_string = '"' + binary_string + '"'
                     if x == len(temp_list_b)-1 :
@@ -363,7 +367,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
         if not legacy:
             group_membership_file.write('Group Name,Member SAM Account Name,Member Status,Group Distinguished Name\n')
         else:
-            group_membership_file.write('Group Name\tMember SAM Account Name\tMember Status\tGroup Distinguished Name\n')
+            group_membership_file.write('Group Name\tMember SAM Account Name\tMember Status\n')
 
         for element in _output_dictionary:
             tmp_element = ''
@@ -373,6 +377,8 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
                     binary_string = binary_string[2:]
                 if binary_string[-1:] == "'":
                     binary_string = binary_string[:-1]
+                if legacy and 'dc=' in binary_string.lower(): # Skip distinguishedName
+                    continue
                 if not legacy and ',' in binary_string:
                         binary_string = '"' + binary_string + '"'
                 if x == len(element)-1 :
