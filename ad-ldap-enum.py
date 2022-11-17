@@ -284,9 +284,8 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
                 tmp_element = ''
                 for x, binary_string in enumerate(temp_list_a[1:]):
                     binary_string = str(binary_string).strip()
-                    if binary_string[:2] == "b'":
+                    if binary_string[:2] == "b'" or binary_string[:2] == 'b"':
                         binary_string = binary_string[2:]
-                    if binary_string[-1:] == "'":
                         binary_string = binary_string[:-1]
                     if legacy and 'dc=' in binary_string.lower(): # Skip distinguishedName
                         continue
@@ -337,9 +336,8 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
                 tmp_element = ''
                 for x, binary_string in enumerate(temp_list_b):
                     binary_string = str(binary_string).strip()
-                    if binary_string[:2] == "b'":
+                    if binary_string[:2] == "b'" or binary_string[:2] == 'b"':
                         binary_string = binary_string[2:]
-                    if binary_string[-1:] == "'":
                         binary_string = binary_string[:-1]
                     if legacy and 'dc=' in binary_string.lower(): # Skip distinguishedName
                         continue
@@ -369,9 +367,8 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
             tmp_element = ''
             for x, binary_string in enumerate(element):
                 binary_string = str(binary_string).strip()
-                if binary_string[:2] == "b'":
+                if binary_string[:2] == "b'" or binary_string[:2] == 'b"':
                     binary_string = binary_string[2:]
-                if binary_string[-1:] == "'":
                     binary_string = binary_string[:-1]
                 if legacy and 'dc=' in binary_string.lower(): # Skip distinguishedName
                     continue
@@ -478,7 +475,9 @@ def parse_spns(service_principle_names):
     temp_other_spns = []
 
     for spn in service_principle_names:
-        spn = str(spn).lstrip("b'").rstrip("'")
+        if spn[:2] == "b'" or spn[:2] == 'b"':
+            spn = spn[2:]
+            spn = spn[:-1]
         if spn.split('/')[0] in sql_spn_strings:
             temp_sql_spns.append(spn)
         elif spn.split('/')[0] in ra_spn_strings:
