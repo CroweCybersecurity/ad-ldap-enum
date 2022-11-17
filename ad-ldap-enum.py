@@ -445,30 +445,18 @@ def query_ldap_with_paging(ldap_client, base_dn, search_filter_custom, attribute
        By default Active Directory will return 1,000 results per query before it errors out.'''
 
     # Paging for AD LDAP Queries
-    total_entries = 0
     output_list= []
-    ldap_client.search(search_base = base_dn, search_filter = search_filter_custom, search_scope = ldap3.SUBTREE, paged_criticality = True, time_limit = query_limit, attributes = attributes, paged_size = page_size)
-    total_entries += len(ldap_client.entries)
-    if total_entries > 1000:
-        cookie = ldap_client.result['controls']['1.2.840.113556.1.4.319']['value']['cookie']
-        while cookie:
-            ldap_client.search(search_base = base_dn,
-                    search_filter = search_filter_custom,
-                    search_scope = ldap3.SUBTREE,
-                    attributes = attributes,
-                    paged_size = page_size,
-                    paged_cookie = cookie)
-            total_entries += len(ldap_client.entries)
-            cookie = ldap_client.result['controls']['1.2.840.113556.1.4.319']['value']['cookie']
-            for entry in ldap_client.entries:
-                print(entry['dn'], entry['attributes'])
+    entry_list = ldap_client.extend.standard.paged_search(search_base = base_dn, search_filter = search_filter_custom, search_scope = ldap3.SUBTREE, paged_criticality = True, time_limit = query_limit, attributes = attributes, paged_size = page_size, generator=False)
 
     # Append Page to Results
-    for element in ldap_client.entries:
-        if output_object is None:
-            output_list.append(element.entry_raw_attributes)
-        else:
-            output_list.append(output_object(element.entry_raw_attributes))
+    # Some of the entry_list responses may not have a 'raw_attributes' key due to those responses being search metadata
+    for entry in entry_list:
+        if 'raw_attributes' in entry and output_object is None:
+            output_list.append(entry['raw_attributes'])
+        elif 'raw_attributes' in entry:
+            output_list.append(output_object(entry['raw_attributes']))
+        # else: # This displays that response metadata without 'raw_attributes'
+            # print(entry)
 
     return output_list
 
