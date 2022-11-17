@@ -251,7 +251,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
         if not legacy:
             user_information_file.write('SAM Account Name,Status,Locked Out,Distinguished Name,User Password,Display Name,Email,Home Directory,Profile Path,Logon Script Path,Password Last Set,Last Logon,User Comment,Description\n')
         else:
-            user_information_file.write('SAM Account NameStatus\tLocked Out\tUser Password\tDisplay Name\tEmail\tHome Directory\tProfile Path\tLogon Script Path\tPassword Last Set\tLast Logon\tUser Comment\tDescription\n')
+            user_information_file.write('SAM Account Name\tStatus\tLocked Out\tUser Password\tDisplay Name\tEmail\tHome Directory\tProfile Path\tLogon Script Path\tPassword Last Set\tLast Logon\tUser Comment\tDescription\n')
 
         for user_object in list(users_dictionary.values()):
             if user_object.primary_group_id and user_object.primary_group_id in group_id_to_dn_dictionary:
@@ -475,6 +475,7 @@ def parse_spns(service_principle_names):
     temp_other_spns = []
 
     for spn in service_principle_names:
+        spn = str(spn)
         if spn[:2] == "b'" or spn[:2] == 'b"':
             spn = spn[2:]
             spn = spn[:-1]
@@ -517,7 +518,7 @@ def get_membership(ldap_client, base_dn, group_dn, query_limit):
 if __name__ == '__main__':
     # Command line arguments
     parser = argparse.ArgumentParser(description='Active Directory LDAP Enumerator')
-    parser.add_argument('-s', '--secure', dest='secure_comm', action='store_true', help='Connect to LDAP over SSL')
+    parser.add_argument('-s', '--secure', dest='secure_comm', action='store_true', help='Connect to LDAP over SSL/TLS')
     parser.add_argument('-t', '--timeout', type=int, default=10, help='LDAP server connection timeout in seconds')
     parser.add_argument('-ql', '--query_limit', type=int, default=30, help='LDAP server query timeout in seconds')
     parser.add_argument('--verbosity', default='ERROR', choices=['OFF', 'ERROR', 'BASIC', 'PROTOCOL', 'NETWORK', 'EXTENDED'], help='Log file LDAP verbosity level')
@@ -526,6 +527,8 @@ if __name__ == '__main__':
     parser.add_argument('-P', '--prompt', dest='password_prompt', action='store_true', help='Prompt for the authentication account\'s password.')
     parser.add_argument('-o', '--prepend', dest='filename_prepend', default='ad-ldap-enum_', help='Prepend a string to all output file names\' CSV.')
     parser.add_argument('--legacy', action='store_true', help='Gather and output attributes using the old python-ldap package .tsv format (will be deprecated)')
+    parser.add_argument('-4', '--inet', action='store_true', help='Only use IPv4 networking (default prefer IPv4)')
+    parser.add_argument('-6', '--inet6', action='store_true', help='Only use IPv6 networking (default prefer IPv4)')
     
     method = parser.add_mutually_exclusive_group(required=True)
     method.add_argument('-n', '--null', dest='null_session', action='store_true', help='Use a null binding to authenticate to LDAP.')
@@ -586,14 +589,21 @@ if __name__ == '__main__':
 
     try:
         # Connect to LDAP
+        if args.inet6:
+            ip_mode = 'IP_V6_ONLY'
+        elif args.inet:
+            ip_mode = 'IP_V4_ONLY'
+        else:
+            ip_mode = 'IP_V4_PREFERRED'
+        
         if args.secure_comm:
             if not args.port:
                 args.port = 636
-            ldap_client = ldap3.Server(args.ldap_server, port = args.port, use_ssl = True, get_info=ldap3.ALL, mode = 'IP_V4_PREFERRED', connect_timeout=args.timeout)
+            ldap_client = ldap3.Server(args.ldap_server, port = args.port, use_ssl = True, get_info=ldap3.ALL, mode = ip_mode, connect_timeout=args.timeout)
         else:
             if not args.port:
                 args.port = 389
-            ldap_client = ldap3.Server(args.ldap_server, port = args.port, get_info=ldap3.ALL, mode = 'IP_V4_PREFERRED', connect_timeout=args.timeout)
+            ldap_client = ldap3.Server(args.ldap_server, port = args.port, get_info=ldap3.ALL, mode = ip_mode, connect_timeout=args.timeout)
 
         print('[-] Connecting to LDAP server at "%s:%i"...' % (args.ldap_server, args.port))
 
