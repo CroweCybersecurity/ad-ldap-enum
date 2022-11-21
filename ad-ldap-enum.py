@@ -523,6 +523,7 @@ if __name__ == '__main__':
     parser.add_argument('-ql', '--query_limit', type=int, default=30, help='LDAP server query timeout in seconds')
     parser.add_argument('--verbosity', default='ERROR', choices=['OFF', 'ERROR', 'BASIC', 'PROTOCOL', 'NETWORK', 'EXTENDED'], help='Log file LDAP verbosity level')
     parser.add_argument('-lf', '--log_file', help='Log text file path')
+    parser.add_argument('-k', '--kerberos', help='Use Kerberos authentication')
     parser.add_argument('-p', '--password', help='Authentication account\'s password or "LM:NTLM".')
     parser.add_argument('-P', '--prompt', dest='password_prompt', action='store_true', help='Prompt for the authentication account\'s password.')
     parser.add_argument('-o', '--prepend', dest='filename_prepend', default='ad-ldap-enum_', help='Prepend a string to all output file names\' CSV.')
@@ -546,9 +547,14 @@ if __name__ == '__main__':
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
 
-   # If --prompt then overwrite args.password now
+    # If --prompt then overwrite args.password now
     if args.password_prompt is True or (not args.password and not args.null_session):
         args.password = getpass()
+
+    # If Kerberos, require user
+    if args.kerberos and (not args.user or not args.domain):
+        print('[e] A user and domain must both be specified with Kerberos authentication usage.') 
+        exit(1)
 
     # Set Logger format
     if args.verbosity != 'OFF' or args.log_file:
@@ -608,12 +614,14 @@ if __name__ == '__main__':
         print('[-] Connecting to LDAP server at "%s:%i"...' % (args.ldap_server, args.port))
 
         # LDAP Authentication
-        if args.null_session is True:
+        if args.null_session:
             ldap_client = ldap3.Connection(ldap_client, read_only=True, raise_exceptions=True, receive_timeout=args.timeout, auto_range=True, return_empty_attributes=False)
         elif args.distinguished_name:
             ldap_client = ldap3.Connection(ldap_client, user=args.distinguished_name, password=args.password, read_only=True, raise_exceptions=True, receive_timeout=args.timeout, auto_range=True, return_empty_attributes=False)
+        elif args.kerberos:
+            ldap_client = ldap3.Connection(ldap_client, user=args.domain + '/' + args.username, read_only=True, raise_exceptions=True, receive_timeout=args.timeout, auto_range=True, return_empty_attributes=False, authentication=ldap3.SASL, sasl_mechanism=ldap3.KERBEROS)
         else:
-            ldap_client = ldap3.Connection(ldap_client, user=args.domain + '\\' + args.username, password=args.password, read_only=True, raise_exceptions=True, authentication=ldap3.NTLM, receive_timeout=args.timeout, auto_range=True, return_empty_attributes=False)
+            ldap_client = ldap3.Connection(ldap_client, user=args.domain + '\\' + args.username, password=args.password, sasl_credentials=(ldap3.ReverseDnsSetting.OPTIONAL_RESOLVE_ALL_ADDRESSES,), read_only=True, raise_exceptions=True, authentication=ldap3.NTLM, receive_timeout=args.timeout, auto_range=True, return_empty_attributes=False)
         ldap_client.bind()
     except ldap3.core.exceptions.LDAPOperationsErrorResult as e:
         if 'perform this operation a successful bind' in str(e):
