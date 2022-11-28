@@ -85,7 +85,7 @@ python 'ad-ldap-enum.py' -d contoso.com -l 10.0.0.1 -u 'Administrator' -k -a 'co
 ### Modification
 If you would like to add more attributes to the non-legacy version, the following steps can be quickly added:
 1. Find the attribute's formatted name at [All Active Directory Attributes](https://learn.microsoft.com/en-us/windows/win32/adschema/attributes-all)
-    a. Please note that modifying the group output may be a little more difficult.
+  * Please note that modifying the group output may be a little more difficult.
 2. Append the attribute to the applicable object list within `user_attributes`, `group_attributes`, or `computer_attributes`
 3. Update the object's class to have a default value (i.e., `distinguished_name = ''`)
 4. Update the object's class to have the `__init__` function parse the retrieved attribute
