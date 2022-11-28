@@ -92,7 +92,7 @@ If you would like to add more attributes to the non-legacy version, the followin
 5. Update the object's output section to include appending the new attribute header and value
 ### Planned Features
 We should plan to include the following features moving forward:
-- Kerberos authentication (preferably not using the Impacket suite so that the tool can be OS agnostic)
+- Kerberos authentication (preferably not using the Impacket suite so that the tool can be OS-agnostic)
 - LDAP signing
 - LDAP channel binding
 - ObjectSID retrieval
