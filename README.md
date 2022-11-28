@@ -69,6 +69,7 @@ Server Parameters:
 ```
 ### Example
 Please see some examples below:
+
 **Password authentication**
 ```
 python 'ad-ldap-enum.py' -d contoso.com -l 10.0.0.1 -u 'Administrator' -p 'P@ssw0rd' -o 'ad-ldap-enum_2' --verbosity BASIC -lf 'ad-ldap-enum_Log.txt'
@@ -84,7 +85,7 @@ python 'ad-ldap-enum.py' -d contoso.com -l 10.0.0.1 -u 'Administrator' -k -a 'co
 ### Modification
 If you would like to add more attributes to the non-legacy version, the following steps can be quickly added:
 1. Find the attribute's formatted name at [All Active Directory Attributes](https://learn.microsoft.com/en-us/windows/win32/adschema/attributes-all)
-  a. Please note that modifying the group output may be a little more difficult.
+    a. Please note that modifying the group output may be a little more difficult.
 2. Append the attribute to the applicable object list within `user_attributes`, `group_attributes`, or `computer_attributes`
 3. Update the object's class to have a default value (i.e., `distinguished_name = ''`)
 4. Update the object's class to have the `__init__` function parse the retrieved attribute
@@ -94,6 +95,8 @@ We should plan to include the following features moving forward:
 - Kerberos authentication (preferably not using the Impacket suite so that the tool can be OS agnostic)
 - LDAP signing
 - LDAP channel binding
+- ObjectSID retrieval
+
 Pull requests are welcome!
 ### Assorted Links
 Please see some assorted reference links and similar projects:
