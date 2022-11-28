@@ -7,14 +7,14 @@ An LDAP based Active Directory object (users, groups, and computers) enumeration
 ad-ldap-enum is a Python script developed to collect users/computers and their group memberships from Active Directory. In large Active Directory environments, tools such as NBTEnum were not performing fast enough. By executing LDAP queries against a domain controller, ad-ldap-enum is able to target specific Active Directory attributes and quickly build out group membership.
 ad-ldap-enum outputs three tab delimited files `Domain_Group_Membership.csv`, `Extended_Domain_User_Information.csv`, and `Extended_Domain_Computer_Information.csv`. The first file contains users, computers, groups, and their memberships. The second file contains users and extra information about the users from Active Directory (e.g. a user's home folder or email address). The third file contains computers in the Domain Computers group and extra information about them from Active Directory (e.g. operating system type and service pack version).
 ad-ldap-enum supports both authenticated and unauthenticated LDAP connections. Additionally, ad-ldap-enum can process nested groups and display a user's actual group membership.
-This tool also supports password and Pass-the-Hash (PtH) `LM:NTLM` style authentication with the soon to be created Kerberos authentication too.
-ad-ldap-enum also supports LDAP over SSL/TLS connections and planned to support LDAP signing requirements too in the coming future. IPv4 and IPv6 networking is also supported as needed.
+This tool also supports password and Pass-the-Hash (PtH) `LM:NTLM` style authentication.
+ad-ldap-enum also supports LDAP over SSL/TLS connections, IPv4, and IPv6 networks.
 ### Requirements
 The package primarily uses the [ldap3](https://ldap3.readthedocs.io/en/latest/) Python package to execute the LDAP connections and queries. To install all requirements, please run the below command:
 ```
 python -m pip install -r 'requirements.txt'
 ```
-Additionally, this tool has been built and tested against Python v3.10 on both Kali Linux and Windows 10. Regardless, this tool aims to be OS-agnostic working on both UNIX/Linux systems and Windows. Furthermore, Python 2.X support will not be added.
+Additionally, this tool has been built and tested against Python v3.10 on both Kali Linux and Windows 10. Regardless, this tool aims to be OS-agnostic working on both UNIX/Linux systems and Windows. Furthermore, Python 2.X will not be supported.
 ### Usage
 Please see the tool's help menu below:
 ```
