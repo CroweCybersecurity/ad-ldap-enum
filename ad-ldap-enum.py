@@ -244,7 +244,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
     # TODO: This could create output duplicates. It should be fixed at some point.
     # Add users if they have the group set as their primary ID as the group.
     # Additionally, add extended domain user information to a text file.
-    user_information_filename = '{0}Extended_Domain_User_Information.csv'.format(args.filename_prepend.strip())
+    user_information_filename = '{0}Extended_Domain_User_Information.csv'.format(args.filename_prepend)
     if legacy:
         user_information_filename = user_information_filename.replace('csv', 'tsv')
     with open(user_information_filename, 'w') as user_information_file:
@@ -304,7 +304,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
                 user_information_file.write(tmp_element)
 
     # Write Domain Computer Information
-    computer_information_filename = '{0}Extended_Domain_Computer_Information.csv'.format(args.filename_prepend.strip())
+    computer_information_filename = '{0}Extended_Domain_Computer_Information.csv'.format(args.filename_prepend)
     if legacy:
         computer_information_filename = computer_information_filename.replace('csv', 'tsv')
     with open(computer_information_filename, 'w') as computer_information_file:
@@ -358,7 +358,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
                 _output_dictionary.append(temp_list_a)
 
     # Write Group Memberships
-    group_membership_filename = '{0}Domain_Group_Membership.csv'.format(args.filename_prepend.strip())
+    group_membership_filename = '{0}Domain_Group_Membership.csv'.format(args.filename_prepend)
     if legacy:
         group_membership_filename = group_membership_filename.replace('csv', 'tsv')
     with open(group_membership_filename, 'w') as group_membership_file:
@@ -528,12 +528,11 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--secure', dest='secure_comm', action='store_true', help='Connect to LDAP over SSL/TLS')
     parser.add_argument('-t', '--timeout', type=int, default=10, help='LDAP server connection timeout in seconds')
     parser.add_argument('-ql', '--query_limit', type=int, default=30, help='LDAP server query timeout in seconds')
-    parser.add_argument('--verbosity', default='ERROR', choices=['OFF', 'ERROR', 'BASIC', 'PROTOCOL', 'NETWORK', 'EXTENDED'], help='Log file LDAP verbosity level')
-    parser.add_argument('-lf', '--log_file', help='Log text file path')
-    parser.add_argument('-k', '--kerberos', action='store_true', help='Use Kerberos authentication')
+    parser.add_argument('--verbosity', default='BASIC', choices=['OFF', 'ERROR', 'BASIC', 'PROTOCOL', 'NETWORK', 'EXTENDED'], help='Log file LDAP verbosity level')
+    #parser.add_argument('-k', '--kerberos', action='store_true', help='Use Kerberos authentication')
     parser.add_argument('-p', '--password', help='Authentication account\'s password or "LM:NTLM".')
     parser.add_argument('-P', '--prompt', dest='password_prompt', action='store_true', help='Prompt for the authentication account\'s password.')
-    parser.add_argument('-o', '--prepend', dest='filename_prepend', default='ad-ldap-enum_', help='Prepend a string to all output file names\' CSV.')
+    parser.add_argument('-o', '--prepend', dest='filename_prepend', default='ad-ldap-enum_', help='Prepend a string to all output file names.')
     parser.add_argument('--legacy', action='store_true', help='Gather and output attributes using the old python-ldap package .tsv format (will be deprecated)')
     parser.add_argument('-4', '--inet', action='store_true', help='Only use IPv4 networking (default prefer IPv4)')
     parser.add_argument('-6', '--inet6', action='store_true', help='Only use IPv6 networking (default prefer IPv4)')
@@ -555,22 +554,19 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # If --prompt then overwrite args.password now
-    if args.password_prompt is True or (not args.password and not args.null_session and not args.kerberos):
+    if args.password_prompt is True or (not args.password and not args.null_session): # and not args.kerberos)
         args.password = getpass()
 
     # If Kerberos, require user
+    '''
     if args.kerberos and (not args.username or not args.domain):
         print('[e] A user and domain must both be specified with Kerberos authentication usage.') 
         exit(1)
-
+    '''
     # Set Logger format
-    if args.verbosity != 'OFF' or args.log_file:
-        if not args.log_file:
-            args.log_file = 'ad-ldap-enum_Log.txt'
-        if args.verbosity == 'OFF':
-            args.verbosity = 'BASIC'
-        print('[-] Writing logs to "%s"...' % args.log_file)
-        logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s', datefmt='%Y-%m-%dT%H:%M:%SZ', level=logging.DEBUG, filename=args.log_file, filemode='a')
+    if args.verbosity != 'OFF':
+        print('[-] Writing logs to "%sLog.txt"...' % args.filename_prepend)
+        logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s', datefmt='%Y-%m-%dT%H:%M:%SZ', level=logging.DEBUG, filename=args.filename_prepend + 'Log.txt', filemode='a')
         # Force UTC
         logging.Formatter.converter = gmtime
 
@@ -626,8 +622,8 @@ if __name__ == '__main__':
             ldap_client = ldap3.Connection(ldap_client, read_only=True, raise_exceptions=True, receive_timeout=args.timeout, auto_range=True, return_empty_attributes=False)
         elif args.distinguished_name:
             ldap_client = ldap3.Connection(ldap_client, user=args.distinguished_name, password=args.password, read_only=True, raise_exceptions=True, receive_timeout=args.timeout, auto_range=True, return_empty_attributes=False)
-        elif args.kerberos:
-            ldap_client = ldap3.Connection(ldap_client, user=args.domain + '/' + args.username, read_only=True, raise_exceptions=True, receive_timeout=args.timeout, auto_range=True, return_empty_attributes=False, authentication=ldap3.SASL, sasl_mechanism=ldap3.KERBEROS)
+        #elif args.kerberos:
+        #    ldap_client = ldap3.Connection(ldap_client, user=args.domain + '/' + args.username, read_only=True, raise_exceptions=True, receive_timeout=args.timeout, auto_range=True, return_empty_attributes=False, authentication=ldap3.SASL, sasl_mechanism=ldap3.KERBEROS)
         else:
             ldap_client = ldap3.Connection(ldap_client, user=args.domain + '\\' + args.username, password=args.password, read_only=True, raise_exceptions=True, authentication=ldap3.NTLM, receive_timeout=args.timeout, auto_range=True, return_empty_attributes=False)
         ldap_client.bind()
