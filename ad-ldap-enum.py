@@ -244,7 +244,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
     # TODO: This could create output duplicates. It should be fixed at some point.
     # Add users if they have the group set as their primary ID as the group.
     # Additionally, add extended domain user information to a text file.
-    user_information_filename = '{0}Extended_Domain_User_Information.csv'.format(args.filename_prepend).strip()
+    user_information_filename = '{0}Extended_Domain_User_Information.csv'.format(args.filename_prepend.strip())
     if legacy:
         user_information_filename = user_information_filename.replace('csv', 'tsv')
     with open(user_information_filename, 'w') as user_information_file:
@@ -290,6 +290,8 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
                         binary_string = binary_string[:-1]
                     if legacy and 'dc=' in binary_string.lower(): # Skip distinguishedName
                         continue
+                    if not legacy and '"' in binary_string:
+                        binary_string = binary_string.replace('"', '*DOUBLEQUOTE*')
                     if not legacy and ',' in binary_string:
                         binary_string = '"' + binary_string + '"'
                     if x == len(temp_list_a[1:])-1 :
@@ -302,7 +304,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
                 user_information_file.write(tmp_element)
 
     # Write Domain Computer Information
-    computer_information_filename = '{0}Extended_Domain_Computer_Information.csv'.format(args.filename_prepend).strip()
+    computer_information_filename = '{0}Extended_Domain_Computer_Information.csv'.format(args.filename_prepend.strip())
     if legacy:
         computer_information_filename = computer_information_filename.replace('csv', 'tsv')
     with open(computer_information_filename, 'w') as computer_information_file:
@@ -342,6 +344,8 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
                         binary_string = binary_string[:-1]
                     if legacy and 'dc=' in binary_string.lower(): # Skip distinguishedName
                         continue
+                    if not legacy and '"' in binary_string:
+                        binary_string = binary_string.replace('"', '*DOUBLEQUOTE*')
                     if not legacy and ',' in binary_string:
                         binary_string = '"' + binary_string + '"'
                     if x == len(temp_list_b)-1 :
@@ -354,7 +358,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
                 _output_dictionary.append(temp_list_a)
 
     # Write Group Memberships
-    group_membership_filename = '{0}Domain_Group_Membership.csv'.format(args.filename_prepend).strip()
+    group_membership_filename = '{0}Domain_Group_Membership.csv'.format(args.filename_prepend.strip())
     if legacy:
         group_membership_filename = group_membership_filename.replace('csv', 'tsv')
     with open(group_membership_filename, 'w') as group_membership_file:
@@ -373,6 +377,8 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
                     binary_string = binary_string[:-1]
                 if legacy and 'dc=' in binary_string.lower(): # Skip distinguishedName
                     continue
+                if not legacy and '"' in binary_string:
+                        binary_string = binary_string.replace('"', '*DOUBLEQUOTE*')
                 if not legacy and ',' in binary_string:
                         binary_string = '"' + binary_string + '"'
                 if x == len(element)-1 :
