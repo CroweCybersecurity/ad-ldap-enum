@@ -184,13 +184,13 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
 
     # LDAP filters
     user_filter = '(objectcategory=user)'
-    user_attributes = ['distinguishedName', 'sAMAccountName', 'userAccountControl', 'primaryGroupID', 'comment', 'description', 'homeDirectory', 'displayName', 'mail', 'pwdLastSet', 'lastLogon', 'profilePath', 'lockoutTime', 'scriptPath', 'userPassword']
+    user_attributes = ['sAMAccountName', 'userAccountControl', 'primaryGroupID', 'comment', 'description', 'homeDirectory', 'displayName', 'mail', 'pwdLastSet', 'lastLogon', 'profilePath', 'lockoutTime', 'scriptPath', 'userPassword', 'distinguishedName']
 
     group_filter = '(objectcategory=group)'
-    group_attributes = ['distinguishedName', 'sAMAccountName', 'member', 'primaryGroupToken']
+    group_attributes = ['sAMAccountName', 'member', 'primaryGroupToken', 'distinguishedName']
 
     computer_filters = '(objectcategory=computer)'
-    computer_attributes = ['distinguishedName', 'sAMAccountName', 'primaryGroupID', 'operatingSystem', 'operatingSystemHotfix', 'operatingSystemServicePack', 'operatingSystemVersion', 'servicePrincipalName']
+    computer_attributes = ['sAMAccountName', 'primaryGroupID', 'operatingSystem', 'operatingSystemHotfix', 'operatingSystemServicePack', 'operatingSystemVersion', 'servicePrincipalName', 'distinguishedName']
 
     # LDAP queries
     print('[-] Querying users...')
@@ -250,7 +250,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
     with open(user_information_filename, 'w') as user_information_file:
         print('[-] Writing domain user information to "%s"...' % user_information_file.name)
         if not legacy:
-            user_information_file.write('SAM Account Name,Status,Locked Out,Distinguished Name,User Password,Display Name,Email,Home Directory,Profile Path,Logon Script Path,Password Last Set,Last Logon,User Comment,Description\n')
+            user_information_file.write('SAM Account Name,Status,Locked Out,User Password,Display Name,Email,Home Directory,Profile Path,Logon Script Path,Password Last Set,Last Logon,User Comment,Description,Distinguished Name\n')
         else:
             user_information_file.write('SAM Account Name\tStatus\tLocked Out\tUser Password\tDisplay Name\tEmail\tHome Directory\tProfile Path\tLogon Script Path\tPassword Last Set\tLast Logon\tUser Comment\tDescription\n')
 
@@ -268,8 +268,6 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
                 temp_list_a.append(user_object.get_account_flags())
                 temp_list_b.append(user_object.get_account_flags())
                 temp_list_a.append(user_object.locked_out)
-                if not legacy:
-                    temp_list_a.append(user_object.distinguished_name)
                 temp_list_a.append(user_object.user_password)
                 temp_list_a.append(user_object.display_name)
                 temp_list_a.append(user_object.mail)
@@ -280,6 +278,8 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
                 temp_list_a.append(user_object.get_last_logon_date())
                 temp_list_a.append(user_object.comment)
                 temp_list_a.append(user_object.description)
+                if not legacy:
+                    temp_list_a.append(user_object.distinguished_name)
                 _output_dictionary.append(temp_list_b)
 
                 tmp_element = ''
@@ -310,7 +310,7 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
     with open(computer_information_filename, 'w') as computer_information_file:
         print('[-] Writing domain computer information to "%s"...' % computer_information_file.name)
         if not legacy:
-            computer_information_file.write('SAM Account Name,OS,OS Hotfix,OS Service Pack,OS Version,Distinguished Name,SQL SPNs,RA SPNS,Share SPNs,Mail SPNs,Auth SPNs,Backup SPNs,Management SPNs,Other SPNs\n')
+            computer_information_file.write('SAM Account Name,OS,OS Hotfix,OS Service Pack,OS Version,SQL SPNs,RA SPNS,Share SPNs,Mail SPNs,Auth SPNs,Backup SPNs,Management SPNs,Other SPNs,Distinguished Name\n')
         else:
             computer_information_file.write('SAM Account Name\tOS\tOS Hotfix\tOS Service Pack\tOS Version\tSQL SPNs\tRA SPNS\tShare SPNs\tMail SPNs\tAuth SPNs\tBackup SPNs\tManagement SPNs\tOther SPNs\n')
 
@@ -332,8 +332,6 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
                 temp_list_b.append(computer_object.operating_system_hotfix)
                 temp_list_b.append(computer_object.operating_system_service_pack)
                 temp_list_b.append(computer_object.operating_system_version)
-                if not legacy:
-                    temp_list_b.append(computer_object.distinguished_name)
                 [temp_list_b.append(','.join(map(str, item))) for item in parse_spns(computer_object.service_principal_names)]
 
                 tmp_element = ''
@@ -354,6 +352,8 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
                         tmp_element += binary_string + '\t'
                     else:
                         tmp_element += binary_string + ','
+                if not legacy:
+                    temp_list_b.append(computer_object.distinguished_name)
                 computer_information_file.write(tmp_element)
                 _output_dictionary.append(temp_list_a)
 
@@ -629,12 +629,14 @@ if __name__ == '__main__':
         ldap_client.bind()
     except ldap3.core.exceptions.LDAPOperationsErrorResult as e:
         if 'perform this operation a successful bind' in str(e):
-            print('[e] In order to perform this operation, a successful bind must be completed on the connection.')
+            print('[e] Although an initial connection was made, a successful bind did not occur.')
         logging.error(traceback.format_exc())
         exit(1)
     except ldap3.core.exceptions.LDAPSocketOpenError as e:
         if 'invalid server address' in str(e):
             print('[e] An invalid server address was provided.')
+        elif 'unreachable' in str(e):
+            print('[e] This host is unreachable; please check the IP address/hostname or the network connection.')
         logging.error(traceback.format_exc())
         exit(1)
     except ldap3.core.exceptions.LDAPInvalidCredentialsResult as e:

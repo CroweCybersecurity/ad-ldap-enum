@@ -5,7 +5,12 @@ An LDAP based Active Directory object (users, groups, and computers) enumeration
 ### About
 
 ad-ldap-enum is a Python script developed to collect users/computers and their group memberships from Active Directory. In large Active Directory environments, tools such as NBTEnum were not performing fast enough. By executing LDAP queries against a domain controller, ad-ldap-enum is able to target specific Active Directory attributes and quickly build out group membership.
-ad-ldap-enum outputs three tab delimited files `Domain_Group_Membership.csv`, `Extended_Domain_User_Information.csv`, and `Extended_Domain_Computer_Information.csv`. The first file contains users, computers, groups, and their memberships. The second file contains users and extra information about the users from Active Directory (e.g. a user's home folder or email address). The third file contains computers in the Domain Computers group and extra information about them from Active Directory (e.g. operating system type and service pack version).
+ad-ldap-enum outputs three tab delimited files:
+- `Domain_Group_Membership.csv`
+- `Extended_Domain_User_Information.csv`
+- `Extended_Domain_Computer_Information.csv`
+
+The first file contains users, computers, groups, and their memberships. The second file contains users and extra information about the users from Active Directory (e.g. a user's home folder or email address). The third file contains computers in the 'Domain Computers' group and extra information about them from Active Directory (e.g. operating system type and service pack version).
 ad-ldap-enum supports both authenticated and unauthenticated LDAP connections. Additionally, ad-ldap-enum can process nested groups and display a user's actual group membership.
 This tool also supports password and Pass-the-Hash (PtH) `LM:NTLM` style authentication.
 ad-ldap-enum also supports LDAP over SSL/TLS connections, IPv4, and IPv6 networks.
@@ -78,10 +83,7 @@ python 'ad-ldap-enum.py' -d contoso.com -l 10.0.0.1 -u 'Administrator' -p 'P@ssw
 ```
 python 'ad-ldap-enum.py' -d contoso.com -l 10.0.0.1 -s -u 'Administrator' -p 'aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0'
 ```
-**Kerberos authentication with alternative domain**
-```
-python 'ad-ldap-enum.py' -d contoso.com -l 10.0.0.1 -u 'Administrator' -k -a 'contoso.local'
-```
+
 ### Modification
 If you would like to add more attributes to the non-legacy version, the following steps can be quickly added:
 1. Find the attribute's formatted name at [All Active Directory Attributes](https://learn.microsoft.com/en-us/windows/win32/adschema/attributes-all)
