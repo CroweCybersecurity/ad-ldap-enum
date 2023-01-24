@@ -333,6 +333,8 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
                 temp_list_b.append(computer_object.operating_system_service_pack)
                 temp_list_b.append(computer_object.operating_system_version)
                 [temp_list_b.append(','.join(map(str, item))) for item in parse_spns(computer_object.service_principal_names)]
+                if not legacy:
+                    temp_list_b.append(computer_object.distinguished_name)
 
                 tmp_element = ''
                 for x, binary_string in enumerate(temp_list_b):
@@ -352,8 +354,6 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legac
                         tmp_element += binary_string + '\t'
                     else:
                         tmp_element += binary_string + ','
-                if not legacy:
-                    temp_list_b.append(computer_object.distinguished_name)
                 computer_information_file.write(tmp_element)
                 _output_dictionary.append(temp_list_a)
 
