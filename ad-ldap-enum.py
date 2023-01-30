@@ -20,6 +20,9 @@ import argparse
 from getpass import getpass
 import argcomplete
 import ssl
+from openpyxl import Workbook, load_workbook
+import csv
+from os.path import isfile
 
 class ADUser(object):
     '''A representation of a user in Active Directory. Class variables are instantiated to a 'safe'
@@ -522,25 +525,44 @@ def get_membership(ldap_client, base_dn, group_dn, query_limit):
 
     return members_list
 
+def csvtsv_to_excel(csvtsv_file, excel_file, sheet_name):
+    # Source: https://www.blog.pythonlibrary.org/2021/09/25/converting-csv-to-excel-with-python/
+    csvtsv_data = []
+    with open(csvtsv_file) as file_obj:
+        if args.legacy:
+            reader = csv.reader(file_obj, delimiter='\t')
+        else:
+            reader = csv.reader(file_obj)
+        for row in reader:
+            csvtsv_data.append(row)
+
+    if not isfile(excel_file):
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = sheet_name
+    else:
+        workbook = load_workbook(excel_file)
+        sheet = workbook.create_sheet(sheet_name)
+    for row in csvtsv_data:
+        sheet.append(row)
+    workbook.save(excel_file)
+
 if __name__ == '__main__':
     # Command line arguments
     parser = argparse.ArgumentParser(description='Active Directory LDAP Enumerator')
-    parser.add_argument('-s', '--secure', dest='secure_comm', action='store_true', help='Connect to LDAP over SSL/TLS')
-    parser.add_argument('-t', '--timeout', type=int, default=10, help='LDAP server connection timeout in seconds')
-    parser.add_argument('-ql', '--query_limit', type=int, default=30, help='LDAP server query timeout in seconds')
-    parser.add_argument('--verbosity', default='BASIC', choices=['OFF', 'ERROR', 'BASIC', 'PROTOCOL', 'NETWORK', 'EXTENDED'], help='Log file LDAP verbosity level')
-    #parser.add_argument('-k', '--kerberos', action='store_true', help='Use Kerberos authentication')
-    parser.add_argument('-p', '--password', help='Authentication account\'s password or "LM:NTLM".')
-    parser.add_argument('-P', '--prompt', dest='password_prompt', action='store_true', help='Prompt for the authentication account\'s password.')
-    parser.add_argument('-o', '--prepend', dest='filename_prepend', default='ad-ldap-enum_', help='Prepend a string to all output file names.')
-    parser.add_argument('--legacy', action='store_true', help='Gather and output attributes using the old python-ldap package .tsv format (will be deprecated)')
-    parser.add_argument('-4', '--inet', action='store_true', help='Only use IPv4 networking (default prefer IPv4)')
-    parser.add_argument('-6', '--inet6', action='store_true', help='Only use IPv6 networking (default prefer IPv4)')
-    
     method = parser.add_mutually_exclusive_group(required=True)
     method.add_argument('-n', '--null', dest='null_session', action='store_true', help='Use a null binding to authenticate to LDAP.')
     method.add_argument('-u', '--username', help='Authentication account\'s username.')
     method.add_argument('-dn', '--distinguished_name', help='Authentication account\'s distinguished name')
+    parser.add_argument('-p', '--password', help='Authentication account\'s password or "LM:NTLM".')
+    parser.add_argument('-P', '--prompt', dest='password_prompt', action='store_true', help='Prompt for the authentication account\'s password.')
+    parser.add_argument('-s', '--secure', dest='secure_comm', action='store_true', help='Connect to LDAP over SSL/TLS')
+    parser.add_argument('-t', '--timeout', type=int, default=10, help='LDAP server connection timeout in seconds')
+    parser.add_argument('-ql', '--query_limit', type=int, default=30, help='LDAP server query timeout in seconds')
+    parser.add_argument('--verbosity', default='BASIC', choices=['OFF', 'ERROR', 'BASIC', 'PROTOCOL', 'NETWORK', 'EXTENDED'], help='Log file LDAP verbosity level')
+    parser.add_argument('--legacy', action='store_true', help='Gather and output attributes using the old python-ldap package .tsv format (will be deprecated)')
+    parser.add_argument('-x', '--excel', action='store_true', help='Output an .XLSX with all 3 sheets: users/groups/computers')
+    parser.add_argument('-o', '--prepend', dest='filename_prepend', default='ad-ldap-enum_', help='Prepend a string to all output file names.')
 
     server_group = parser.add_argument_group('Server Parameters')
     server_group.add_argument('-l', '--server', required=True, dest='ldap_server', help='FQDN/IP address of the LDAP server.')
@@ -548,21 +570,17 @@ if __name__ == '__main__':
     server_group.add_argument('-d', '--domain', required=True, help='Authentication account\'s domain. If an alternative domain is not specified, this will be also used as the Base DN for searching LDAP.')
     server_group.add_argument('-a', '--alt-domain', dest='alt_domain', help='Alternative FQDN to use as the Base DN for searching LDAP.')
     server_group.add_argument('-e', '--nested', dest='nested_groups', action='store_true', help='Expand nested groups.')
+    server_group.add_argument('-4', '--inet', action='store_true', help='Only use IPv4 networking (default prefer IPv4)')
+    server_group.add_argument('-6', '--inet6', action='store_true', help='Only use IPv6 networking (default prefer IPv4)')
 
     # Parse arguments
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
 
     # If --prompt then overwrite args.password now
-    if args.password_prompt is True or (not args.password and not args.null_session): # and not args.kerberos)
+    if args.password_prompt is True or (not args.password and not args.null_session):
         args.password = getpass()
 
-    # If Kerberos, require user
-    '''
-    if args.kerberos and (not args.username or not args.domain):
-        print('[e] A user and domain must both be specified with Kerberos authentication usage.') 
-        exit(1)
-    '''
     # Set Logger format
     if args.verbosity != 'OFF':
         print('[-] Writing logs to "%sLog.txt"...' % args.filename_prepend)
@@ -622,8 +640,6 @@ if __name__ == '__main__':
             ldap_client = ldap3.Connection(ldap_client, read_only=True, raise_exceptions=True, receive_timeout=args.timeout, auto_range=True, return_empty_attributes=False)
         elif args.distinguished_name:
             ldap_client = ldap3.Connection(ldap_client, user=args.distinguished_name, password=args.password, read_only=True, raise_exceptions=True, receive_timeout=args.timeout, auto_range=True, return_empty_attributes=False)
-        #elif args.kerberos:
-        #    ldap_client = ldap3.Connection(ldap_client, user=args.domain + '/' + args.username, read_only=True, raise_exceptions=True, receive_timeout=args.timeout, auto_range=True, return_empty_attributes=False, authentication=ldap3.SASL, sasl_mechanism=ldap3.KERBEROS)
         else:
             ldap_client = ldap3.Connection(ldap_client, user=args.domain + '\\' + args.username, password=args.password, read_only=True, raise_exceptions=True, authentication=ldap3.NTLM, receive_timeout=args.timeout, auto_range=True, return_empty_attributes=False)
         ldap_client.bind()
@@ -663,3 +679,12 @@ if __name__ == '__main__':
         print(traceback.format_exc())
         logging.error(traceback.format_exc())
         exit(1)
+    
+    if args.excel and not args.legacy:
+        csvtsv_to_excel(args.filename_prepend + 'Extended_Domain_User_Information.csv', args.filename_prepend + 'Users_Groups_Computers.xlsx', 'Users')
+        csvtsv_to_excel(args.filename_prepend + 'Domain_Group_Membership.csv', args.filename_prepend + 'Users_Groups_Computers.xlsx', 'Groups')
+        csvtsv_to_excel(args.filename_prepend + 'Extended_Domain_Computer_Information.csv', args.filename_prepend + 'Users_Groups_Computers.xlsx', 'Computers')
+    elif args.excel:
+        csvtsv_to_excel(args.filename_prepend + 'Extended_Domain_User_Information.tsv', args.filename_prepend + 'Users_Groups_Computers.xlsx', 'Users')
+        csvtsv_to_excel(args.filename_prepend + 'Domain_Group_Membership.tsv', args.filename_prepend + 'Users_Groups_Computers.xlsx', 'Groups')
+        csvtsv_to_excel(args.filename_prepend + 'Extended_Domain_Computer_Information.tsv', args.filename_prepend + 'Users_Groups_Computers.xlsx', 'Computers')

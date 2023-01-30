@@ -23,18 +23,24 @@ Additionally, this tool has been built and tested against Python v3.10 on both K
 ### Usage
 Please see the tool's help menu below:
 ```
-usage: ad-ldap-enum.py [-h] [-s] [-t TIMEOUT] [-ql QUERY_LIMIT]
+usage: ad-ldap-enum.py [-h] (-n | -u USERNAME | -dn DISTINGUISHED_NAME)
+                       [-p PASSWORD] [-P] [-s] [-t TIMEOUT] [-ql QUERY_LIMIT]
                        [--verbosity {OFF,ERROR,BASIC,PROTOCOL,NETWORK,EXTENDED}]
-                       [-lf LOG_FILE] [-p PASSWORD] [-P] [-o FILENAME_PREPEND]
-                       [--legacy] [-4] [-6]
-                       (-n | -u USERNAME | -dn DISTINGUISHED_NAME) -l
-                       LDAP_SERVER [--port PORT] -d DOMAIN [-a ALT_DOMAIN]
-                       [-e]
+                       [--legacy] [-x] [-o FILENAME_PREPEND] -l LDAP_SERVER
+                       [--port PORT] -d DOMAIN [-a ALT_DOMAIN] [-e] [-4] [-6]
 
 Active Directory LDAP Enumerator
 
-options:
+optional arguments:
   -h, --help            show this help message and exit
+  -n, --null            Use a null binding to authenticate to LDAP.
+  -u USERNAME, --username USERNAME
+                        Authentication account's username.
+  -dn DISTINGUISHED_NAME, --distinguished_name DISTINGUISHED_NAME
+                        Authentication account's distinguished name
+  -p PASSWORD, --password PASSWORD
+                        Authentication account's password or "LM:NTLM".
+  -P, --prompt          Prompt for the authentication account's password.
   -s, --secure          Connect to LDAP over SSL/TLS
   -t TIMEOUT, --timeout TIMEOUT
                         LDAP server connection timeout in seconds
@@ -42,35 +48,25 @@ options:
                         LDAP server query timeout in seconds
   --verbosity {OFF,ERROR,BASIC,PROTOCOL,NETWORK,EXTENDED}
                         Log file LDAP verbosity level
-  -lf LOG_FILE, --log_file LOG_FILE
-                        Log text file path
-  -p PASSWORD, --password PASSWORD
-                        Authentication account's password or "LM:NTLM".
-  -P, --prompt          Prompt for the authentication account's password.
-  -o FILENAME_PREPEND, --prepend FILENAME_PREPEND
-                        Prepend a string to all output file names' CSV.
   --legacy              Gather and output attributes using the old python-ldap
                         package .tsv format (will be deprecated)
-  -4, --inet            Only use IPv4 networking (default prefer IPv4)
-  -6, --inet6           Only use IPv6 networking (default prefer IPv4)
-  -n, --null            Use a null binding to authenticate to LDAP.
-  -u USERNAME, --username USERNAME
-                        Authentication account's username.
-  -dn DISTINGUISHED_NAME, --distinguished_name DISTINGUISHED_NAME
-                        Authentication account's distinguished name
+  -x, --excel           Output an .XLSX with all 3 sheets: users/groups/computers
+  -o FILENAME_PREPEND, --prepend FILENAME_PREPEND
+                        Prepend a string to all output file names.
 
 Server Parameters:
   -l LDAP_SERVER, --server LDAP_SERVER
                         FQDN/IP address of the LDAP server.
   --port PORT           TCP port of the LDAP server.
   -d DOMAIN, --domain DOMAIN
-                        Authentication account's domain. If an alternative
-                        domain is not specified, this will be also used as the
-                        Base DN for searching LDAP.
+                        Authentication account's domain. If an alternative domain
+                        is not specified, this will be also used as the Base DN
+                        for searching LDAP.
   -a ALT_DOMAIN, --alt-domain ALT_DOMAIN
-                        Alternative FQDN to use as the Base DN for searching
-                        LDAP.
+                        Alternative FQDN to use as the Base DN for searching LDAP.
   -e, --nested          Expand nested groups.
+  -4, --inet            Only use IPv4 networking (default prefer IPv4)
+  -6, --inet6           Only use IPv6 networking (default prefer IPv4)
 ```
 ### Example
 Please see some examples below:
