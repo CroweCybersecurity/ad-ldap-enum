@@ -645,7 +645,7 @@ if __name__ == '__main__':
         ldap_client.bind()
     except ldap3.core.exceptions.LDAPOperationsErrorResult as e:
         if 'perform this operation a successful bind' in str(e):
-            print('[e] Although an initial connection was made, a successful bind did not occur.')
+            print('[e] Although an initial connection was made, a bind failed to connect.')
         logging.error(traceback.format_exc())
         exit(1)
     except ldap3.core.exceptions.LDAPSocketOpenError as e:
