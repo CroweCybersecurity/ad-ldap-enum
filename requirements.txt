@@ -1,1 +1,3 @@
-python-ldap
+argcomplete
+ldap3
+openpyxl

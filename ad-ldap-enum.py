@@ -4,25 +4,30 @@
 # Date::   2015 - 2017
 
 # Modified: dekanfrus - October 15, 2019 
-# Retrieve the "userPassword" field for user accounts, which is commonly used in SSO applications. Password is stored in cleartex.
+# Retrieve the 'userPassword' field for user accounts, which is commonly used in SSO applications. Password is stored in cleartex.
 
-"""An LDAP Active Directory enumerator. The script queries Active Directory over LDAP for users, groups and computers.
+'''An LDAP Active Directory enumerator. The script queries Active Directory over LDAP for users, groups and computers.
    This information is correlated and output to the console showing groups, their membership and other user information.
-   The script supports null and authenticated Active Directory access."""
+   The script supports null and authenticated Active Directory access.'''
 
-import sys
-import ldap
+import traceback
+import ldap3
+from ldap3.utils.log import set_library_log_detail_level, OFF, ERROR, BASIC, PROTOCOL, NETWORK, EXTENDED
 import datetime
+from time import gmtime
 import logging
 import argparse
-import getpass
-
-from collections import deque
+from getpass import getpass
+import argcomplete
+import ssl
+from openpyxl import Workbook, load_workbook
+import csv
+from os.path import isfile
 
 class ADUser(object):
-    """A representation of a user in Active Directory. Class variables are instantiated to a 'safe'
+    '''A representation of a user in Active Directory. Class variables are instantiated to a 'safe'
        state so when the object is used during processing it can be assumed that all properties have
-       some sort of value."""
+       some sort of value.'''
     distinguished_name = ''
     sam_account_name = ''
     user_account_control = ''
@@ -49,9 +54,9 @@ class ADUser(object):
         if 'primaryGroupID' in retrieved_attributes:
             self.primary_group_id = retrieved_attributes['primaryGroupID'][0]
         if 'comment' in retrieved_attributes:
-            self.comment = str(retrieved_attributes['comment'][0]).replace("\t", '*TAB*').replace("\r", '*CR*').replace("\n", '*LF*')
+            self.comment = str(retrieved_attributes['comment'][0]).replace('\t', '*TAB*').replace('\r', '*CR*').replace('\n', '*LF*')
         if 'description' in retrieved_attributes:
-            self.description = str(retrieved_attributes['description'][0]).replace("\t", '*TAB*').replace("\r", '*CR*').replace("\n", '*LF*')
+            self.description = str(retrieved_attributes['description'][0]).replace('\t', '*TAB*').replace('\r', '*CR*').replace('\n', '*LF*')
         if 'homeDirectory' in retrieved_attributes:
             self.home_directory = retrieved_attributes['homeDirectory'][0]
         if 'displayName' in retrieved_attributes:
@@ -121,9 +126,9 @@ class ADUser(object):
         return self.last_logon
 
 class ADComputer(object):
-    """A representation of a computer in Active Directory. Class variables are instantiated to a 'safe'
+    '''A representation of a computer in Active Directory. Class variables are instantiated to a 'safe'
        state so when the object is used during processing it can be assumed that all properties have
-       some sort of value."""
+       some sort of value.'''
     distinguished_name = ''
     sam_account_name = ''
     primary_group_id = ''
@@ -152,9 +157,9 @@ class ADComputer(object):
             self.service_principal_names = retrieved_attributes['servicePrincipalName']
 
 class ADGroup(object):
-    """A representation of a group in Active Directory. Class variables are instantiated to a 'safe'
+    '''A representation of a group in Active Directory. Class variables are instantiated to a 'safe'
        state so when the object is used during processing it can be assumed that all properties have
-       some sort of value."""
+       some sort of value.'''
     distinguished_name = ''
     sam_account_name = ''
     primary_group_token = ''
@@ -170,11 +175,11 @@ class ADGroup(object):
             self.primary_group_token = retrieved_attributes['primaryGroupToken'][0]
         if 'member' in retrieved_attributes:
             self.members = retrieved_attributes['member']
-        if any(dictionary_key.startswith('member;range') for dictionary_key in list(retrieved_attributes.keys())):
-            self.is_large_group = True
+            if any(dictionary_key.startswith('member;range') for dictionary_key in list(retrieved_attributes.keys())):
+                self.is_large_group = True
 
-def ldap_queries(ldap_client, base_dn, explode_nested_groups):
-    """Main worker function for the script."""
+def ldap_queries(ldap_client, base_dn, explode_nested_groups, query_limit, legacy):
+    '''Main worker function for the script.'''
     users_dictionary = {}
     groups_dictionary = {}
     computers_dictionary = {}
@@ -182,63 +187,75 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
 
     # LDAP filters
     user_filter = '(objectcategory=user)'
-    user_attributes = ['distinguishedName', 'sAMAccountName', 'userAccountControl', 'primaryGroupID', 'comment', 'description', 'homeDirectory', 'displayName', 'mail', 'pwdLastSet', 'lastLogon', 'profilePath', 'lockoutTime', 'scriptPath', 'userPassword']
+    user_attributes = ['sAMAccountName', 'userAccountControl', 'primaryGroupID', 'comment', 'description', 'homeDirectory', 'displayName', 'mail', 'pwdLastSet', 'lastLogon', 'profilePath', 'lockoutTime', 'scriptPath', 'userPassword', 'distinguishedName']
 
     group_filter = '(objectcategory=group)'
-    group_attributes = ['distinguishedName', 'sAMAccountName', 'member', 'primaryGroupToken']
+    group_attributes = ['sAMAccountName', 'member', 'primaryGroupToken', 'distinguishedName']
 
     computer_filters = '(objectcategory=computer)'
-    computer_attributes = ['distinguishedName', 'sAMAccountName', 'primaryGroupID', 'operatingSystem', 'operatingSystemHotfix', 'operatingSystemServicePack', 'operatingSystemVersion', 'servicePrincipalName']
+    computer_attributes = ['sAMAccountName', 'primaryGroupID', 'operatingSystem', 'operatingSystemHotfix', 'operatingSystemServicePack', 'operatingSystemVersion', 'servicePrincipalName', 'distinguishedName']
 
     # LDAP queries
-    logging.info('Querying users')
-    users = query_ldap_with_paging(ldap_client, base_dn, user_filter, user_attributes, ADUser)
-    logging.info('Querying groups')
-    groups = query_ldap_with_paging(ldap_client, base_dn, group_filter, group_attributes, ADGroup)
-    logging.info('Querying computers')
-    computers = query_ldap_with_paging(ldap_client, base_dn, computer_filters, computer_attributes, ADComputer)
+    print('[-] Querying users...')
+    users = query_ldap_with_paging(ldap_client, base_dn, user_filter, user_attributes, query_limit, ADUser)
+    print('[i] Found %i users' % len(users))
+    print('[-] Querying groups...')
+    groups = query_ldap_with_paging(ldap_client, base_dn, group_filter, group_attributes, query_limit, ADGroup)
+    print('[i] Found %i groups' % len(groups))
+    print('[-] Querying computers...')
+    computers = query_ldap_with_paging(ldap_client, base_dn, computer_filters, computer_attributes, query_limit, ADComputer)
+    print('[i] Found %i computers' % len(computers))
 
     # LDAP dictionaries
-    logging.info('Building users dictionary')
+    print('[-] Building users dictionary...')
     for element in users:
         users_dictionary[element.distinguished_name] = element
+    print('[-] Done')
 
-    logging.info('Building groups dictionary')
+    print('[-] Building groups dictionary...')
     for element in groups:
         group_id_to_dn_dictionary[element.primary_group_token] = element.distinguished_name
         groups_dictionary[element.distinguished_name] = element
+    print('[-] Done')
 
-    logging.info('Building computers dictionary')
+    print('[-] Building computers dictionary...')
     for element in computers:
         computers_dictionary[element.distinguished_name] = element
+    print('[-] Done')
 
-    # Loop through each group. If the membership is a range then query AD to get the full group membership
-    logging.info('Exploding large groups')
+    # Loop through each group. If the membership is a range, then query AD to get the full group membership
+    print('[-] Exploding large groups...')
     for group_key, group_object in groups_dictionary.items():
         if group_object.is_large_group:
-            logging.debug('Getting full membership for [%s]', group_key)
-            groups_dictionary[group_key].members = get_membership_with_ranges(ldap_client, base_dn, group_key)
+            print('Getting full membership for "%s"' % group_key)
+            groups_dictionary[group_key].members = get_membership(ldap_client, base_dn, group_key, query_limit)
 
     # Build group membership
-    logging.info('Building group membership')
-    logging.info('There is a total of [%i] groups', len(list(groups_dictionary.keys())))
+    print('[-] Building group membership...')
+    print('[i] %i groups were found.' % len(list(groups_dictionary.keys())))
 
     current_group_number = 0
     _output_dictionary = []
     for grp in list(groups_dictionary.keys()):
         current_group_number += 1
-        _output_dictionary += process_group(users_dictionary, groups_dictionary, computers_dictionary, grp, explode_nested_groups, None, [])
+        _output_dictionary += process_group(users_dictionary, groups_dictionary, computers_dictionary, grp, explode_nested_groups, None, [], legacy)
 
         if current_group_number % 1000 == 0:
-            logging.info('Processing group [%i]', current_group_number)
+            print('[-] Processing group %i...' % current_group_number)
+    print('[-] Done')
 
     # TODO: This could create output duplicates. It should be fixed at some point.
     # Add users if they have the group set as their primary ID as the group.
     # Additionally, add extended domain user information to a text file.
-    user_information_filename = '{0} Extended Domain User Information.tsv'.format(args.filename_prepend).strip()
+    user_information_filename = '{0}Extended_Domain_User_Information.csv'.format(args.filename_prepend)
+    if legacy:
+        user_information_filename = user_information_filename.replace('csv', 'tsv')
     with open(user_information_filename, 'w') as user_information_file:
-        logging.info('Writing domain user information to [%s]', user_information_file.name)
-        user_information_file.write('SAM Account Name\tStatus\tLocked Out\tUser Password\tDisplay Name\tEmail\tHome Directory\tProfile Path\tLogon Script Path\tPassword Last Set\tLast Logon\tUser Comment\tDescription\n')
+        print('[-] Writing domain user information to "%s"...' % user_information_file.name)
+        if not legacy:
+            user_information_file.write('SAM Account Name,Status,Locked Out,User Password,Display Name,Email,Home Directory,Profile Path,Logon Script Path,Password Last Set,Last Logon,User Comment,Description,Distinguished Name\n')
+        else:
+            user_information_file.write('SAM Account Name\tStatus\tLocked Out\tUser Password\tDisplay Name\tEmail\tHome Directory\tProfile Path\tLogon Script Path\tPassword Last Set\tLast Logon\tUser Comment\tDescription\n')
 
         for user_object in list(users_dictionary.values()):
             if user_object.primary_group_id and user_object.primary_group_id in group_id_to_dn_dictionary:
@@ -264,27 +281,42 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
                 temp_list_a.append(user_object.get_last_logon_date())
                 temp_list_a.append(user_object.comment)
                 temp_list_a.append(user_object.description)
+                if not legacy:
+                    temp_list_a.append(user_object.distinguished_name)
                 _output_dictionary.append(temp_list_b)
 
-                tmp_element = ""
+                tmp_element = ''
                 for x, binary_string in enumerate(temp_list_a[1:]):
-                    binary_string = str(binary_string)
-                    if binary_string[:2] == "b'":
+                    binary_string = str(binary_string).strip()
+                    if binary_string[:2] == "b'" or binary_string[:2] == 'b"':
                         binary_string = binary_string[2:]
-                    if binary_string[-1:] == "'":
                         binary_string = binary_string[:-1]
+                    if legacy and 'dc=' in binary_string.lower(): # Skip distinguishedName
+                        continue
+                    if not legacy and '"' in binary_string:
+                        binary_string = binary_string.replace('"', '*DOUBLEQUOTE*')
+                    if not legacy and ',' in binary_string:
+                        binary_string = '"' + binary_string + '"'
                     if x == len(temp_list_a[1:])-1 :
-                        tmp_element += binary_string + "\n"
+                        tmp_element += binary_string + '\n'
+                    elif legacy:
+                        tmp_element += binary_string + '\t'
                     else:
-                        tmp_element += binary_string + "\t"
+                        tmp_element += binary_string + ','
                 
-                user_information_file.write(tmp_element) #"\t".join(str(temp_list_a[1:])) + "\n")
+                user_information_file.write(tmp_element)
 
     # Write Domain Computer Information
-    computer_information_filename = '{0} Extended Domain Computer Information.tsv'.format(args.filename_prepend).strip()
+    computer_information_filename = '{0}Extended_Domain_Computer_Information.csv'.format(args.filename_prepend)
+    if legacy:
+        computer_information_filename = computer_information_filename.replace('csv', 'tsv')
     with open(computer_information_filename, 'w') as computer_information_file:
-        logging.info('Writing domain computer information to [%s]', computer_information_file.name)
-        computer_information_file.write('SAM Account Name\tOS\tOS Hotfix\tOS Service Pack\tOS VersiontSQL SPNs\tRA SPNS\tShare SPNs\tMail SPNs\tAuth SPNs\tBackup SPNs\tManagement SPNs\tOther SPNs\n')
+        print('[-] Writing domain computer information to "%s"...' % computer_information_file.name)
+        if not legacy:
+            computer_information_file.write('SAM Account Name,OS,OS Hotfix,OS Service Pack,OS Version,SQL SPNs,RA SPNS,Share SPNs,Mail SPNs,Auth SPNs,Backup SPNs,Management SPNs,Other SPNs,Distinguished Name\n')
+        else:
+            computer_information_file.write('SAM Account Name\tOS\tOS Hotfix\tOS Service Pack\tOS Version\tSQL SPNs\tRA SPNS\tShare SPNs\tMail SPNs\tAuth SPNs\tBackup SPNs\tManagement SPNs\tOther SPNs\n')
+
 
         # TODO: This could create output duplicates. It should be fixed at some point.
         # Add computers if they have the group set as their primary ID as the group
@@ -304,56 +336,79 @@ def ldap_queries(ldap_client, base_dn, explode_nested_groups):
                 temp_list_b.append(computer_object.operating_system_service_pack)
                 temp_list_b.append(computer_object.operating_system_version)
                 [temp_list_b.append(','.join(map(str, item))) for item in parse_spns(computer_object.service_principal_names)]
+                if not legacy:
+                    temp_list_b.append(computer_object.distinguished_name)
 
-                tmp_element = ""
+                tmp_element = ''
                 for x, binary_string in enumerate(temp_list_b):
-                    binary_string = str(binary_string)
-                    if binary_string[:2] == "b'":
+                    binary_string = str(binary_string).strip()
+                    if binary_string[:2] == "b'" or binary_string[:2] == 'b"':
                         binary_string = binary_string[2:]
-                    if binary_string[-1:] == "'":
                         binary_string = binary_string[:-1]
+                    if legacy and 'dc=' in binary_string.lower(): # Skip distinguishedName
+                        continue
+                    if not legacy and '"' in binary_string:
+                        binary_string = binary_string.replace('"', '*DOUBLEQUOTE*')
+                    if not legacy and ',' in binary_string:
+                        binary_string = '"' + binary_string + '"'
                     if x == len(temp_list_b)-1 :
-                        tmp_element += binary_string + "\n"
+                        tmp_element += binary_string + '\n'
+                    elif legacy:
+                        tmp_element += binary_string + '\t'
                     else:
-                        tmp_element += binary_string + "\t"
+                        tmp_element += binary_string + ','
                 computer_information_file.write(tmp_element)
                 _output_dictionary.append(temp_list_a)
 
     # Write Group Memberships
-    group_membership_filename = '{0} Domain Group Membership.tsv'.format(args.filename_prepend).strip()
+    group_membership_filename = '{0}Domain_Group_Membership.csv'.format(args.filename_prepend)
+    if legacy:
+        group_membership_filename = group_membership_filename.replace('csv', 'tsv')
     with open(group_membership_filename, 'w') as group_membership_file:
-        logging.info('Writing membership information to [%s]', group_membership_file.name)
-        group_membership_file.write('Group Name\tSAM Account Name\tStatus\n')
+        print('[-] Writing membership information to "%s"...' % group_membership_file.name)
+        if not legacy:
+            group_membership_file.write('Group Name,Member SAM Account Name,Member Status,Group Distinguished Name\n')
+        else:
+            group_membership_file.write('Group Name\tMember SAM Account Name\tMember Status\n')
 
         for element in _output_dictionary:
-            tmp_element = ""
+            tmp_element = ''
             for x, binary_string in enumerate(element):
-                binary_string = str(binary_string)
-                if binary_string[:2] == "b'":
+                binary_string = str(binary_string).strip()
+                if binary_string[:2] == "b'" or binary_string[:2] == 'b"':
                     binary_string = binary_string[2:]
-                if binary_string[-1:] == "'":
                     binary_string = binary_string[:-1]
+                if legacy and 'dc=' in binary_string.lower(): # Skip distinguishedName
+                    continue
+                if not legacy and '"' in binary_string:
+                        binary_string = binary_string.replace('"', '*DOUBLEQUOTE*')
+                if not legacy and ',' in binary_string:
+                        binary_string = '"' + binary_string + '"'
                 if x == len(element)-1 :
-                    tmp_element += binary_string + "\n"
+                    tmp_element += binary_string + '\n'
+                elif legacy:
+                    tmp_element += binary_string + '\t'
                 else:
-                    tmp_element += binary_string + "\t"
+                    tmp_element += binary_string + ','
                 
             group_membership_file.write(tmp_element)
 
-def process_group(users_dictionary, groups_dictionary, computers_dictionary, group_distinguished_name, explode_nested, base_group_name, groups_seen):
-    """Builds group membership for a specified group."""
+def process_group(users_dictionary, groups_dictionary, computers_dictionary, group_distinguished_name, explode_nested_bool, base_group_name, groups_seen, legacy):
+    '''Builds group membership for a specified group.'''
     # Store assorted group information.
     group_dictionary = []
 
     # Query SAM name or used redefined SAM name if processing a nested group.
     if base_group_name is None:
         group_sam_name = groups_dictionary[group_distinguished_name].sam_account_name
-    elif base_group_name is not None:
+    else:
         group_sam_name = base_group_name
 
     # Add empty groups to the Domain Group Membership list for full visibility.
     if not groups_dictionary[group_distinguished_name].members:
-        temp_list = [group_sam_name, '']
+        temp_list = [group_sam_name, '', '', group_distinguished_name]
+        if legacy:
+            temp_list.pop(-1)
         group_dictionary.append(temp_list)
 
     # Add users/groups/computer if they are a 'memberOf' the group
@@ -361,69 +416,56 @@ def process_group(users_dictionary, groups_dictionary, computers_dictionary, gro
         # Process users.
         if member in users_dictionary:
             user_member = users_dictionary[member]
-
-            temp_list = [group_sam_name, user_member.sam_account_name, user_member.get_account_flags()]
+            temp_list = [group_sam_name, user_member.sam_account_name, user_member.get_account_flags(), group_distinguished_name]
+            if legacy:
+                temp_list.pop(-1)
             group_dictionary.append(temp_list)
 
         # Process computers.
         elif member in computers_dictionary:
-            temp_list = [group_sam_name, computers_dictionary[member].sam_account_name]
+            temp_list = [group_sam_name, computers_dictionary[member].sam_account_name, '', group_distinguished_name]
+            if legacy:
+                temp_list.pop(-1)
             group_dictionary.append(temp_list)
 
         # Process groups.
         elif member in groups_dictionary:
-            if not explode_nested or (explode_nested and base_group_name is None):
-                temp_list = [group_sam_name, groups_dictionary[member].sam_account_name]
+            if not explode_nested_bool or (explode_nested_bool and base_group_name is None):
+                temp_list = [group_sam_name, groups_dictionary[member].sam_account_name, '', group_distinguished_name]
+                if legacy:
+                    temp_list.pop(-1)
                 group_dictionary.append(temp_list)
 
-            if explode_nested:
+            if explode_nested_bool:
                 # Stop processing the chain if a circular reference is detected.
                 if member in groups_seen:
                     pass
                 # Process a nested group.
                 else:
                     groups_seen.append(member)
-                    group_dictionary += process_group(users_dictionary, groups_dictionary, computers_dictionary, member, True, group_sam_name, groups_seen)
+                    group_dictionary += process_group(users_dictionary, groups_dictionary, computers_dictionary, member, True, group_sam_name, groups_seen, legacy)
 
     return group_dictionary
 
-def query_ldap_with_paging(ldap_client, base_dn, search_filter, attributes, output_object=None, page_size=1000):
-    """Get all the Active Directory results from LDAP using a paging approach.
-       By default Active Directory will return 1,000 results per query before it errors out."""
-
-    # Method Variables
-    cookie=''
-    more_pages = True
-    output_array = deque()
+def query_ldap_with_paging(ldap_client, base_dn, search_filter_custom, attributes, query_limit, output_object=None, page_size=1000):
+    '''Get all the Active Directory results from LDAP using a paging approach.
+       By default Active Directory will return 1,000 results per query before it errors out.'''
 
     # Paging for AD LDAP Queries
-    ldap_control = ldap.controls.SimplePagedResultsControl(True, size=page_size, cookie='')
+    output_list= []
+    entry_list = ldap_client.extend.standard.paged_search(search_base = base_dn, search_filter = search_filter_custom, search_scope = ldap3.SUBTREE, paged_criticality = True, time_limit = query_limit, attributes = attributes, paged_size = page_size, generator=False)
 
-    while more_pages:
-        # Query the LDAP Server
-        msgid = ldap_client.search_ext(base_dn, ldap.SCOPE_SUBTREE, search_filter, attributes, serverctrls=[ldap_control])
-        result_type, result_data, message_id, server_controls = ldap_client.result3(msgid)
+    # Append Page to Results
+    # Some of the entry_list responses may not have a 'raw_attributes' key due to those responses being search metadata
+    for entry in entry_list:
+        if 'raw_attributes' in entry and output_object is None:
+            output_list.append(entry['raw_attributes'])
+        elif 'raw_attributes' in entry:
+            output_list.append(output_object(entry['raw_attributes']))
+        # else: # This displays that response metadata without 'raw_attributes'
+            # print(entry)
 
-        # Append Page to Results
-        for element in result_data:
-            if (output_object is None) and (element[0] is not None):
-                output_array.append(element[1])
-            elif (output_object is not None) and (element[0] is not None):
-                output_array.append(output_object(element[1]))
-
-       # Get the page control and get the cookie from the control.
-        page_controls = [c for c in server_controls if c.controlType == ldap.controls.SimplePagedResultsControl.controlType]
-
-        if page_controls:
-            cookie = page_controls[0].cookie
-
-        # If there is no cookie then all the pages have been retrieved.
-        if not cookie:
-            more_pages = False
-        else:
-            ldap_control.cookie = cookie
-
-    return output_array
+    return output_list
 
 def parse_spns(service_principle_names):
     temp_sql_spns = []
@@ -443,121 +485,206 @@ def parse_spns(service_principle_names):
     temp_other_spns = []
 
     for spn in service_principle_names:
-
-        if spn.split(b'/')[0] in sql_spn_strings:
+        spn = str(spn)
+        if spn[:2] == "b'" or spn[:2] == 'b"':
+            spn = spn[2:]
+            spn = spn[:-1]
+        if spn.split('/')[0] in sql_spn_strings:
             temp_sql_spns.append(spn)
-        elif spn.split(b'/')[0] in ra_spn_strings:
+        elif spn.split('/')[0] in ra_spn_strings:
             temp_ra_spns.append(spn)
-        elif spn.split(b'/')[0] in share_spn_strings:
+        elif spn.split('/')[0] in share_spn_strings:
             temp_share_spns.append(spn)
-        elif spn.split(b'/')[0] in mail_spn_strings:
+        elif spn.split('/')[0] in mail_spn_strings:
             temp_mail_spns.append(spn)
-        elif spn.split(b'/')[0] in auth_spn_strings:
+        elif spn.split('/')[0] in auth_spn_strings:
             temp_auth_spns.append(spn)
-        elif spn.split(b'/')[0] in backup_spn_strings:
+        elif spn.split('/')[0] in backup_spn_strings:
             temp_backup_spns.append(spn)
-        elif spn.split(b'/')[0] in management_spn_strings:
+        elif spn.split('/')[0] in management_spn_strings:
             temp_management_spns.append(spn)
         else:
             temp_other_spns.append(spn)
 
     return [temp_sql_spns, temp_ra_spns, temp_share_spns, temp_mail_spns, temp_auth_spns, temp_backup_spns, temp_management_spns, temp_other_spns]
 
-def get_membership_with_ranges(ldap_client, base_dn, group_dn):
-    """Queries the membership of an Active Directory group. For large groups Active Directory will
-       Not return the full membership by default but will instead return partial results. Additional
-       processing is needed to get the full membership."""
-    output_array = []
+def get_membership(ldap_client, base_dn, group_dn, query_limit):
+    '''Queries the membership of an Active Directory group. For large groups Active Directory will
+       not return the full membership by default but will instead return partial results. Additional
+       processing is needed to get the full membership.'''
+    members_list = []
 
-    # RFC 4515 sanitation.
-    sanatized_group_dn = str(group_dn).replace('(', '\\28').replace(')', '\\29').replace('*', '\\2a').replace('\\', '\\5c')
+     # RFC 4515 sanitation.
+    sanitized_group_dn = str(group_dn).replace('(', '\\28').replace(')', '\\29').replace('*', '\\2a').replace('\\', '\\5c')
 
-    membership_filter = '(&(|(objectcategory=user)(objectcategory=group)(objectcategory=computer))(memberof={0}))'.format(sanatized_group_dn)
-    membership_results = query_ldap_with_paging(ldap_client, base_dn, membership_filter, ['distinguishedName'])
+    membership_filter = '(&(|(objectcategory=user)(objectcategory=group)(objectcategory=computer))(memberOf={0}))'.format(sanitized_group_dn)
+    membership_results = query_ldap_with_paging(ldap_client, base_dn, membership_filter, ['distinguishedName'], query_limit)
 
     for element in membership_results:
-        output_array.append(element['distinguishedName'][0])
+        members_list.append(element['distinguishedName'])
 
-    return output_array
+    return members_list
+
+def csvtsv_to_excel(csvtsv_file, excel_file, sheet_name):
+    # Source: https://www.blog.pythonlibrary.org/2021/09/25/converting-csv-to-excel-with-python/
+    csvtsv_data = []
+    with open(csvtsv_file) as file_obj:
+        if args.legacy:
+            reader = csv.reader(file_obj, delimiter='\t')
+        else:
+            reader = csv.reader(file_obj)
+        for row in reader:
+            csvtsv_data.append(row)
+
+    if not isfile(excel_file):
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = sheet_name
+    else:
+        workbook = load_workbook(excel_file)
+        sheet = workbook.create_sheet(sheet_name)
+    for row in csvtsv_data:
+        sheet.append(row)
+    workbook.save(excel_file)
 
 if __name__ == '__main__':
-    start_time = datetime.datetime.now()
-
     # Command line arguments
-    parser = argparse.ArgumentParser(description="Active Directory LDAP Enumerator")
+    parser = argparse.ArgumentParser(description='Active Directory LDAP Enumerator')
+    method = parser.add_mutually_exclusive_group(required=True)
+    method.add_argument('-n', '--null', dest='null_session', action='store_true', help='Use a null binding to authenticate to LDAP.')
+    method.add_argument('-u', '--username', help='Authentication account\'s username.')
+    method.add_argument('-dn', '--distinguished_name', help='Authentication account\'s distinguished name')
+    parser.add_argument('-p', '--password', help='Authentication account\'s password or "LM:NTLM".')
+    parser.add_argument('-P', '--prompt', dest='password_prompt', action='store_true', help='Prompt for the authentication account\'s password.')
+    parser.add_argument('-s', '--secure', dest='secure_comm', action='store_true', help='Connect to LDAP over SSL/TLS')
+    parser.add_argument('-t', '--timeout', type=int, default=10, help='LDAP server connection timeout in seconds')
+    parser.add_argument('-ql', '--query_limit', type=int, default=30, help='LDAP server query timeout in seconds')
+    parser.add_argument('--verbosity', default='BASIC', choices=['OFF', 'ERROR', 'BASIC', 'PROTOCOL', 'NETWORK', 'EXTENDED'], help='Log file LDAP verbosity level')
+    parser.add_argument('--legacy', action='store_true', help='Gather and output attributes using the old python-ldap package .tsv format (will be deprecated)')
+    parser.add_argument('-x', '--excel', action='store_true', help='Output an .XLSX with all 3 sheets: users/groups/computers')
+    parser.add_argument('-o', '--prepend', dest='filename_prepend', default='ad-ldap-enum_', help='Prepend a string to all output file names.')
+
     server_group = parser.add_argument_group('Server Parameters')
-    server_group.add_argument('-l', '--server', required=True, dest='ldap_server', help='IP address of the LDAP server.')
-    server_group.add_argument('-d', '--domain', required=True, dest='domain', help='Authentication account\'s FQDN. If an alternative domain is not specified this will be also used as the Base DN for searching LDAP.')
+    server_group.add_argument('-l', '--server', required=True, dest='ldap_server', help='FQDN/IP address of the LDAP server.')
+    server_group.add_argument('--port', type=int, help='TCP port of the LDAP server.')
+    server_group.add_argument('-d', '--domain', required=True, help='Authentication account\'s domain. If an alternative domain is not specified, this will be also used as the Base DN for searching LDAP.')
     server_group.add_argument('-a', '--alt-domain', dest='alt_domain', help='Alternative FQDN to use as the Base DN for searching LDAP.')
     server_group.add_argument('-e', '--nested', dest='nested_groups', action='store_true', help='Expand nested groups.')
-    authentication_group = parser.add_argument_group('Authentication Parameters')
-    authentication_group.add_argument('-n', '--null', dest='null_session', action='store_true', help='Use a null binding to authenticate to LDAP.')
-    authentication_group.add_argument('-s', '--secure', dest='secure_comm', action='store_true', help='Connect to LDAP over SSL')
-    authentication_group.add_argument('-u', '--username', dest='username', help='Authentication account\'s username.')
-    authentication_group.add_argument('-p', '--password', dest='password', help='Authentication account\'s password.')
-    authentication_group.add_argument('-P', '--prompt', dest='passwordPrompt', action='store_true', help='Prompt for the authentication account\'s password.')    
-    parser.add_argument('-v', '--verbose', dest='verbosity', action='store_true', help='Display debugging information.')
-    parser.add_argument('-o', '--prepend', dest='filename_prepend', default='', help='Prepend a string to all output file names.')
+    server_group.add_argument('-4', '--inet', action='store_true', help='Only use IPv4 networking (default prefer IPv4)')
+    server_group.add_argument('-6', '--inet6', action='store_true', help='Only use IPv6 networking (default prefer IPv4)')
+
+    # Parse arguments
+    argcomplete.autocomplete(parser)
     args = parser.parse_args()
 
-   # If --prompt then overwrite args.password now
-    if args.passwordPrompt is True:
-        args.password = getpass.getpass()
-   
-    # Instantiate logger
-    if args.verbosity is True:
-        logLevel = 10
-    else:
-        logLevel = 20
+    # If --prompt then overwrite args.password now
+    if args.password_prompt is True or (not args.password and not args.null_session):
+        args.password = getpass()
 
-    logging.basicConfig(format='%(asctime)-19s %(levelname)-8s %(message)s', datefmt='%Y-%m-%d %H:%M:%S', level=logLevel)
+    # Set Logger format
+    if args.verbosity != 'OFF':
+        print('[-] Writing logs to "%sLog.txt"...' % args.filename_prepend)
+        logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s', datefmt='%Y-%m-%dT%H:%M:%SZ', level=logging.DEBUG, filename=args.filename_prepend + 'Log.txt', filemode='a')
+        # Force UTC
+        logging.Formatter.converter = gmtime
+
+    # Configure ldap3 package verbosity level
+    if args.verbosity == 'ERROR':
+        set_library_log_detail_level(ERROR)
+    elif args.verbosity == 'BASIC':
+        set_library_log_detail_level(BASIC)
+    elif args.verbosity == 'PROTOCOL':
+        set_library_log_detail_level(PROTOCOL)
+    elif args.verbosity == 'NETWORK':
+        set_library_log_detail_level(NETWORK)
+    elif args.verbosity == 'EXTENDED':
+        set_library_log_detail_level(EXTENDED)
+    else:
+        set_library_log_detail_level(OFF)
+
+    # Build the baseDN
+    if not args.distinguished_name:
+        if args.alt_domain:
+            formatted_domain_name = args.alt_domain.replace('.', ',dc=')
+        else:
+            formatted_domain_name = args.domain.replace('.', ',dc=')
+
+        base_dn = 'dc={0}'.format(formatted_domain_name)
+    else:
+        base_dn = args.distinguished_name
+    print('[-] Using BaseDN of "%s"...' % base_dn)
 
     try:
         # Connect to LDAP
-        if args.secure_comm:
-            ldap.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_ALLOW)
-            ldap_client = ldap.initialize('ldaps://{0}'.format(args.ldap_server))
+        if args.inet6:
+            ip_mode = 'IP_V6_ONLY'
+        elif args.inet:
+            ip_mode = 'IP_V4_ONLY'
         else:
-            ldap_client = ldap.initialize('ldap://{0}'.format(args.ldap_server))
+            ip_mode = 'IP_V4_PREFERRED'
+        
+        if args.secure_comm:
+            if not args.port:
+                args.port = 636
+            tls_config = ldap3.Tls(validate=ssl.CERT_NONE, version=ssl.PROTOCOL_TLS_CLIENT)
+            ldap_client = ldap3.Server(args.ldap_server, port = args.port, use_ssl = True, tls=tls_config, get_info=ldap3.ALL, mode = ip_mode, connect_timeout=args.timeout)
+        else:
+            if not args.port:
+                args.port = 389
+            ldap_client = ldap3.Server(args.ldap_server, port = args.port, get_info=ldap3.ALL, mode = ip_mode, connect_timeout=args.timeout)
 
-        logging.debug('Connecting to LDAP server at [%s]', ldap_client.get_option(ldap.OPT_URI))
-
-        ldap_client.set_option(ldap.OPT_REFERRALS, ldap.OPT_OFF)
-        ldap_client.protocol_version = 3
+        print('[-] Connecting to LDAP server at "%s:%i"...' % (args.ldap_server, args.port))
 
         # LDAP Authentication
-        if args.null_session is True:
-            ldap_client.simple_bind_s()
+        if args.null_session:
+            ldap_client = ldap3.Connection(ldap_client, read_only=True, raise_exceptions=True, receive_timeout=args.timeout, auto_range=True, return_empty_attributes=False)
+        elif args.distinguished_name:
+            ldap_client = ldap3.Connection(ldap_client, user=args.distinguished_name, password=args.password, read_only=True, raise_exceptions=True, receive_timeout=args.timeout, auto_range=True, return_empty_attributes=False)
         else:
-            fully_qualified_username = '{0}@{1}'.format(args.username, args.domain)
-            ldap_client.simple_bind_s(fully_qualified_username, args.password)
-    except ldap.INVALID_CREDENTIALS as e:
-        ldap_client.unbind()
-        logging.error('Incorrect username or password')
-        logging.debug(e)
-        sys.exit(0)
-    except ldap.SERVER_DOWN as e:
-        logging.error('LDAP server is unavailable')
-        logging.debug(e)
-        sys.exit(0)
+            ldap_client = ldap3.Connection(ldap_client, user=args.domain + '\\' + args.username, password=args.password, read_only=True, raise_exceptions=True, authentication=ldap3.NTLM, receive_timeout=args.timeout, auto_range=True, return_empty_attributes=False)
+        ldap_client.bind()
+    except ldap3.core.exceptions.LDAPOperationsErrorResult as e:
+        if 'perform this operation a successful bind' in str(e):
+            print('[e] Although an initial connection was made, a bind failed to connect.')
+        logging.error(traceback.format_exc())
+        exit(1)
+    except ldap3.core.exceptions.LDAPSocketOpenError as e:
+        if 'invalid server address' in str(e):
+            print('[e] An invalid server address was provided.')
+        elif 'unreachable' in str(e):
+            print('[e] This host is unreachable; please check the IP address/hostname or the network connection.')
+        logging.error(traceback.format_exc())
+        exit(1)
+    except ldap3.core.exceptions.LDAPInvalidCredentialsResult as e:
+        if 'invalidCredentials' in str(e):
+            print('[e] Invalid credentials or domain were provided.')
+        logging.error(traceback.format_exc())
+        exit(1)
+    except Exception as e:
+        print(traceback.format_exc())
+        logging.error(traceback.format_exc())
+        exit(1)
 
-    # Build the baseDN
-    if args.alt_domain:
-        formatted_domain_name = args.alt_domain.replace('.', ',dc=')
-    else:
-        formatted_domain_name = args.domain.replace('.', ',dc=')
-
-    base_dn = 'dc={0}'.format(formatted_domain_name)
-    logging.debug('Using BaseDN of [%s]', base_dn)
-
+    print('[-] Success')
     # Query LDAP
     try:
-        ldap_queries(ldap_client, base_dn, args.nested_groups)
+        ldap_queries(ldap_client, base_dn, args.nested_groups, args.query_limit, args.legacy)
         ldap_client.unbind()
-    except ldap.OPERATIONS_ERROR as e:
-        logging.error('An operations error has occurred')
-        logging.debug(e)
-    finally:
-        end_time = datetime.datetime.now()
-        logging.info('Elapsed Time [%s]', end_time - start_time)
-        sys.exit(0)
+    except ldap3.core.exceptions.LDAPAttributeError as e:
+        if 'invalid attribute type' in str(e):
+            print('[e] An invalid attribute type was provided.')
+        logging.error(traceback.format_exc())
+        exit(1)
+    except Exception as e:
+        print(traceback.format_exc())
+        logging.error(traceback.format_exc())
+        exit(1)
+    
+    if args.excel and not args.legacy:
+        csvtsv_to_excel(args.filename_prepend + 'Extended_Domain_User_Information.csv', args.filename_prepend + 'Users_Groups_Computers.xlsx', 'Users')
+        csvtsv_to_excel(args.filename_prepend + 'Domain_Group_Membership.csv', args.filename_prepend + 'Users_Groups_Computers.xlsx', 'Groups')
+        csvtsv_to_excel(args.filename_prepend + 'Extended_Domain_Computer_Information.csv', args.filename_prepend + 'Users_Groups_Computers.xlsx', 'Computers')
+    elif args.excel:
+        csvtsv_to_excel(args.filename_prepend + 'Extended_Domain_User_Information.tsv', args.filename_prepend + 'Users_Groups_Computers.xlsx', 'Users')
+        csvtsv_to_excel(args.filename_prepend + 'Domain_Group_Membership.tsv', args.filename_prepend + 'Users_Groups_Computers.xlsx', 'Groups')
+        csvtsv_to_excel(args.filename_prepend + 'Extended_Domain_Computer_Information.tsv', args.filename_prepend + 'Users_Groups_Computers.xlsx', 'Computers')
