@@ -1371,30 +1371,44 @@ async def main():
                    f"{args.password}@{args.ldap_server}:{port}")
         elif args.username:
             if args.use_kerberos:
-                # Kerberos authentication - try different kerberos schemes
+                # Kerberos authentication - use proper kerberos scheme
+                from urllib.parse import quote
+                
                 if args.password:
-                    # Kerberos with password - try kerberos scheme
-                    url = f"{protocol}+kerberos://{args.domain}\\{args.username}:{args.password}@{args.ldap_server}:{port}?dc_ip={args.ldap_server}"
+                    # Kerberos with password - URL encode password
+                    encoded_password = quote(args.password, safe='')
+                    url = f"kerberos+{protocol}://{args.domain}\\{args.username}:{encoded_password}@{args.ldap_server}:{port}/?dc={args.ldap_server}"
                 else:
-                    # Kerberos without password - try kerberos scheme  
-                    url = f"{protocol}+kerberos://{args.domain}\\{args.username}@{args.ldap_server}:{port}?dc_ip={args.ldap_server}"
+                    # Kerberos without password - use cached credentials
+                    url = f"kerberos+{protocol}://{args.domain}\\{args.username}@{args.ldap_server}:{port}/?dc={args.ldap_server}"
             else:
-                # NTLM authentication - need to specify scheme for proper auth
-                base_protocol = f"{protocol}+ntlm"
+                # NTLM authentication - use standard ldap/ldaps scheme
+                from urllib.parse import quote
+                
+                # URL encode the password to handle special characters
+                encoded_password = quote(args.password, safe='')
+                
                 if ':' in args.password and len(args.password.split(':')) == 2:
                     # LM:NTLM hash format
-                    url = (f"{base_protocol}://{args.domain}\\{args.username}:"
-                           f"{args.password}@{args.ldap_server}:{port}")
+                    url = (f"{protocol}://{args.domain}\\{args.username}:"
+                           f"{encoded_password}@{args.ldap_server}:{port}")
                 else:
                     # Plain password
-                    url = (f"{base_protocol}://{args.domain}\\{args.username}:"
-                           f"{args.password}@{args.ldap_server}:{port}")
+                    url = (f"{protocol}://{args.domain}\\{args.username}:"
+                           f"{encoded_password}@{args.ldap_server}:{port}")
+                           
+                print(f'[i] Using NTLM authentication for user: {args.domain}\\{args.username}')
         else:
             print('[!] Error: No valid authentication method specified')
             exit(1)
         
         print('[-] Connecting to LDAP server at "%s:%i"...' % 
               (args.ldap_server, port))
+        
+        # Debug: print URL without password for troubleshooting
+        if args.verbosity in ['PROTOCOL', 'NETWORK', 'EXTENDED']:
+            safe_url = url.replace(f':{encoded_password if "encoded_password" in locals() else args.password}@', ':***@')
+            print(f'[DEBUG] Connection URL: {safe_url}')
         
         if args.use_kerberos:
             # Use display format for user-friendly messages
@@ -1423,102 +1437,9 @@ async def main():
         if channel_binding_info:
             print(f'[i] Attempting connection with {channel_binding_info} channel binding')
         
-        # Create LDAP client using factory or manual construction
-        if args.use_kerberos:
-            # Manual Kerberos connection setup to properly set dc_ip
-            from msldap.commons.target import MSLDAPTarget
-            from asyauth.common.credentials import UniCredential
-            from msldap.client import MSLDAPClient
-            
-            # Create target with dc_ip
-            target = MSLDAPTarget(
-                ip=args.ldap_server,
-                port=port,
-                dc_ip=args.ldap_server  # Set dc_ip for Kerberos
-            )
-            
-            # Create target for credentials (needed for PTH)
-            from asysocks.unicomm.common.target import UniTarget, UniProto
-            cred_target = UniTarget(
-                ip=args.ldap_server, 
-                port=88,  # Kerberos port
-                protocol=UniProto.CLIENT_TCP,
-                dc_ip=args.ldap_server,
-                domain=args.domain
-            )
-            
-            # Create Kerberos credentials
-            if args.ccache_file:
-                # Load credentials from .ccache file
-                print(f'[i] Loading Kerberos credentials from .ccache file: {args.ccache_file}')
-                credentials = load_ccache_credentials(args.ccache_file, args.username, args.domain, cred_target)
-            elif args.kirbi_file:
-                # Load credentials from .kirbi file
-                print(f'[i] Loading Kerberos credentials from .kirbi file: {args.kirbi_file}')
-                credentials = load_kirbi_credentials(args.kirbi_file, args.username, args.domain, cred_target)
-            elif args.password:
-                # Check if password is a hash/key format for Kerberos PTH
-                if ':' in args.password and len(args.password.split(':')) == 2:
-                    # Kerberos Pass-the-Hash with LM:NT format - use NT hash
-                    from asyauth.common.credentials.kerberos import KerberosCredential
-                    from asyauth.common.constants import asyauthSecret
-                    
-                    lm_hash, nt_hash = args.password.split(':')
-                    # Create manual Kerberos credential with NT hash
-                    credentials = KerberosCredential(
-                        secret=nt_hash,
-                        username=args.username,
-                        domain=args.domain,
-                        stype=asyauthSecret.NT,
-                        target=cred_target
-                    )
-                elif len(args.password) == 32 and all(c in '0123456789abcdefABCDEF' for c in args.password):
-                    # AES-128 key - 32 hex characters (no colon, so not NT hash)
-                    from asyauth.common.credentials.kerberos import KerberosCredential
-                    from asyauth.common.constants import asyauthSecret
-                    
-                    credentials = KerberosCredential(
-                        secret=args.password,
-                        username=args.username,
-                        domain=args.domain,
-                        stype=asyauthSecret.AES,
-                        target=cred_target
-                    )
-                elif len(args.password) == 64 and all(c in '0123456789abcdefABCDEF' for c in args.password):
-                    # AES-256 key - 64 hex characters
-                    from asyauth.common.credentials.kerberos import KerberosCredential
-                    from asyauth.common.constants import asyauthSecret
-                    
-                    credentials = KerberosCredential(
-                        secret=args.password,
-                        username=args.username,
-                        domain=args.domain,
-                        stype=asyauthSecret.AES,
-                        target=cred_target
-                    )
-                else:
-                    # Kerberos with password - create manual credential
-                    from asyauth.common.credentials.kerberos import KerberosCredential
-                    from asyauth.common.constants import asyauthSecret
-                    
-                    credentials = KerberosCredential(
-                        secret=args.password,
-                        username=args.username,
-                        domain=args.domain,
-                        stype=asyauthSecret.PASSWORD,
-                        target=cred_target
-                    )
-            else:
-                # Kerberos without password (cached credentials)
-                cred_url = f"kerberos://{args.domain}\\{args.username}@{args.ldap_server}"
-                credentials = UniCredential.from_url(cred_url)
-            
-            # Create client
-            ldap_client = MSLDAPClient(target, credentials)
-        else:
-            # Use factory for non-Kerberos connections
-            factory = LDAPConnectionFactory.from_url(url)
-            ldap_client = factory.get_client()
+        # Create LDAP client using factory for all authentication types
+        factory = LDAPConnectionFactory.from_url(url)
+        ldap_client = factory.get_client()
         
         # TODO: Implement channel binding when msldap supports it
         # For now, this is a placeholder for future enhancement
