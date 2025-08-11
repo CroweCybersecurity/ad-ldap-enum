@@ -40,7 +40,7 @@ This tool has been built and tested with Python 3.8+ on Windows, Linux, and macO
 ```cmd
 usage: ad-ldap-enum.py [-h] (-n | -u USERNAME | -dn DISTINGUISHED_NAME) [-k] [-p PASSWORD] [-P] [--ccache CCACHE_FILE] 
                        [--kirbi KIRBI_FILE] [--method {ldap,ldaps}] [--channel-binding {none,tls-server-end-point,tls-unique}] 
-                       [-t TIMEOUT] [-ql QUERY_LIMIT] [--verbosity {OFF,ERROR,BASIC,PROTOCOL,NETWORK,EXTENDED}] [--legacy] 
+                       [-t TIMEOUT] [-ql QUERY_LIMIT] [--debug] [--legacy] 
                        [-x] [-o FILENAME_PREPEND] [--delay DELAY] [--jitter JITTER] [--page-size PAGE_SIZE] 
                        -l LDAP_SERVER [--port PORT] -d DOMAIN [-a ALT_DOMAIN] [-e] [-4] [-6]
 
@@ -67,8 +67,7 @@ optional arguments:
                         Connection timeout in seconds (default: 10)
   -ql QUERY_LIMIT, --query_limit QUERY_LIMIT
                         Query timeout in seconds (default: 30)
-  --verbosity {OFF,ERROR,BASIC,PROTOCOL,NETWORK,EXTENDED}
-                        Log verbosity level (default: BASIC)
+  --debug               Enable debug logging (shows detailed msldap internal operations)
   --legacy              Use legacy TSV format (fewer attributes)
   -x, --excel           Output Excel file with all worksheets
   -o FILENAME_PREPEND, --prepend FILENAME_PREPEND
@@ -211,7 +210,7 @@ python ad-ldap-enum.py -d domain.tld -l dc.domain.tld -u username123 -p 'Passwor
 - **`-x, --excel`**: Generate Excel (.xlsx) file
 - **`-o, --prepend`**: Custom prefix for output filenames
 - **`--legacy`**: Use legacy TSV format (fewer attributes)
-- **`--verbosity`**: Log detail level (OFF, ERROR, BASIC, PROTOCOL, NETWORK, EXTENDED)
+- **`--debug`**: Enable detailed debug logging (shows msldap internal operations)
 
 ## Security Considerations
 

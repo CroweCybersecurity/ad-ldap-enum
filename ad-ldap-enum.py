@@ -94,6 +94,74 @@ def get_attribute_value(attributes, attr_name, default=''):
     return default
 
 
+async def resolve_sid_with_msldap(ldap_client, sid_binary):
+    """Use msldap's built-in SID resolution when possible.
+    
+    Args:
+        ldap_client: Active msldap client connection
+        sid_binary: Binary SID data
+        
+    Returns:
+        str: String representation of SID
+    """
+    try:
+        # Try to use msldap's built-in SID resolution
+        if hasattr(ldap_client, 'resolv_sid') and sid_binary:
+            # Convert binary SID to string using msldap's method
+            sid_string = await ldap_client.resolv_sid(sid_binary)
+            if sid_string:
+                return sid_string
+    except Exception as e:
+        # Fall back to manual conversion if msldap method fails
+        pass
+    
+    # Fallback to manual SID conversion
+    return convert_sid_to_string_manual(sid_binary)
+
+
+def convert_sid_to_string_manual(sid_binary):
+    """Manual SID conversion as fallback.
+    
+    Args:
+        sid_binary: Binary SID data
+        
+    Returns:
+        str: String representation of SID
+    """
+    try:
+        # Handle different input types
+        if isinstance(sid_binary, str):
+            # If it's already a string, assume it's the SID
+            return sid_binary
+        
+        if not isinstance(sid_binary, (bytes, bytearray)):
+            return str(sid_binary)
+        
+        # Parse the SID structure
+        if len(sid_binary) < 8:
+            return f'<Invalid SID: too short ({len(sid_binary)} bytes)>'
+            
+        revision = sid_binary[0]
+        sub_authority_count = sid_binary[1]
+        authority = struct.unpack('>Q', b'\x00\x00' + sid_binary[2:8])[0]
+        
+        sid_string = f'S-{revision}-{authority}'
+        
+        # Parse sub-authorities (little-endian 32-bit integers)
+        for i in range(sub_authority_count):
+            if len(sid_binary) >= 12 + (i * 4):
+                sub_auth = struct.unpack('<I', sid_binary[8 + (i * 4):12 + (i * 4)])[0]
+                sid_string += f'-{sub_auth}'
+        
+        return sid_string
+    except Exception:
+        # If conversion fails, return the binary data as hex
+        try:
+            return f'<SID hex: {sid_binary.hex()}>'
+        except:
+            return f'<SID conversion failed: {type(sid_binary)}>'
+
+
 def load_ccache_credentials(ccache_path, username, domain, target):
     """Load Kerberos credentials from .ccache file."""
     try:
@@ -221,6 +289,46 @@ def cleanup_opsec_artifacts(args):
             print(f'[i] Cleaned up artifact: {artifact}')
         except Exception as e:
             print(f'[!] Warning: Could not clean artifact {artifact}: {e}')
+
+
+async def get_server_info_enhanced(ldap_client):
+    """Get enhanced server information using msldap built-in methods.
+    
+    Args:
+        ldap_client: Active msldap client connection
+        
+    Returns:
+        dict: Server information dictionary
+    """
+    server_info = {}
+    
+    try:
+        # Use msldap's built-in server info method
+        if hasattr(ldap_client, 'get_server_info'):
+            info = await ldap_client.get_server_info()
+            if info:
+                server_info['server_info'] = info
+                print(f'[i] Server Info: {info}')
+        
+        # Get AD-specific information if available
+        if hasattr(ldap_client, 'get_ad_info'):
+            ad_info = await ldap_client.get_ad_info()
+            if ad_info:
+                server_info['ad_info'] = ad_info
+                print(f'[i] Active Directory Info: {ad_info}')
+                
+        # Get domain name using msldap method
+        if hasattr(ldap_client, 'get_domain_name'):
+            domain_name = await ldap_client.get_domain_name()
+            if domain_name:
+                server_info['domain_name'] = domain_name
+                print(f'[i] Domain Name: {domain_name}')
+                
+    except Exception as e:
+        print(f'[!] Could not retrieve server info: {e}')
+        logging.warning(f'Server info retrieval failed: {e}')
+    
+    return server_info
 
 
 class ADUser(object):
@@ -587,11 +695,22 @@ class ADGroup(object):
 
 async def ldap_queries(ldap_client, base_dn, explode_nested_groups, 
                        query_limit, args):
-    """Main worker function for the script with OPSEC controls."""
+    """Main worker function for the script with OPSEC controls and msldap optimizations."""
     users_dictionary = {}
     groups_dictionary = {}
     computers_dictionary = {}
     group_id_to_dn_dictionary = {}
+
+    # Check if we can use msldap's built-in methods for better performance
+    use_builtin_methods = all(hasattr(ldap_client, method) for method in 
+                             ['get_all_users', 'get_all_groups', 'get_all_machines'])
+    
+    if use_builtin_methods and not args.debug:
+        print('[i] Using optimized msldap built-in methods for enumeration')
+        logging.info('Using msldap built-in enumeration methods')
+    else:
+        print('[i] Using custom LDAP filters for enumeration')
+        logging.info('Using custom LDAP filter-based enumeration')
 
     # LDAP filters - use AD-specific filters by default, but allow for 
     # standard LDAP testing
@@ -631,29 +750,66 @@ async def ldap_queries(ldap_client, base_dn, explode_nested_groups,
         group_attributes = ['cn', 'uniqueMember', 'distinguishedName']
         computer_filters = '(objectclass=device)'  # Unlikely to find any
         computer_attributes = ['cn', 'distinguishedName']
+        use_builtin_methods = False  # Disable for non-AD servers
 
-    # LDAP queries with OPSEC controls
+    # LDAP queries with OPSEC controls and error handling
     print('[-] Querying users...')
-    users = await query_ldap_with_paging(
-        ldap_client, base_dn, user_filter, user_attributes, query_limit, ADUser,
-        page_size=args.page_size, delay=args.delay, jitter=args.jitter
-    )
-    print('[i] Found %i users' % len(users))
+    try:
+        if use_builtin_methods:
+            # Use msldap's optimized method
+            users_raw = await ldap_client.get_all_users()
+            users = [ADUser(user) for user in users_raw]
+        else:
+            # Use our custom paging method
+            users = await query_ldap_with_paging(
+                ldap_client, base_dn, user_filter, user_attributes, query_limit, ADUser,
+                page_size=args.page_size, delay=args.delay, jitter=args.jitter
+            )
+        print('[i] Found %i users' % len(users))
+        logging.info(f'Retrieved {len(users)} user objects')
+    except Exception as e:
+        print(f'[!] Error querying users: {e}')
+        logging.error(f'User query failed: {e}')
+        users = []
     
     print('[-] Querying groups...')
-    groups = await query_ldap_with_paging(
-        ldap_client, base_dn, group_filter, group_attributes, query_limit, ADGroup,
-        page_size=args.page_size, delay=args.delay, jitter=args.jitter
-    )
-    print('[i] Found %i groups' % len(groups))
+    try:
+        if use_builtin_methods:
+            # Use msldap's optimized method  
+            groups_raw = await ldap_client.get_all_groups()
+            groups = [ADGroup(group) for group in groups_raw]
+        else:
+            # Use our custom paging method
+            groups = await query_ldap_with_paging(
+                ldap_client, base_dn, group_filter, group_attributes, query_limit, ADGroup,
+                page_size=args.page_size, delay=args.delay, jitter=args.jitter
+            )
+        print('[i] Found %i groups' % len(groups))
+        logging.info(f'Retrieved {len(groups)} group objects')
+    except Exception as e:
+        print(f'[!] Error querying groups: {e}')
+        logging.error(f'Group query failed: {e}')
+        groups = []
     
     print('[-] Querying computers...')
-    computers = await query_ldap_with_paging(
-        ldap_client, base_dn, computer_filters, computer_attributes, 
-        query_limit, ADComputer, page_size=args.page_size, delay=args.delay, 
-        jitter=args.jitter
-    )
-    print('[i] Found %i computers' % len(computers))
+    try:
+        if use_builtin_methods:
+            # Use msldap's optimized method
+            computers_raw = await ldap_client.get_all_machines()
+            computers = [ADComputer(computer) for computer in computers_raw]
+        else:
+            # Use our custom paging method
+            computers = await query_ldap_with_paging(
+                ldap_client, base_dn, computer_filters, computer_attributes, 
+                query_limit, ADComputer, page_size=args.page_size, delay=args.delay, 
+                jitter=args.jitter
+            )
+        print('[i] Found %i computers' % len(computers))
+        logging.info(f'Retrieved {len(computers)} computer objects')
+    except Exception as e:
+        print(f'[!] Error querying computers: {e}')
+        logging.error(f'Computer query failed: {e}')
+        computers = []
 
     # LDAP dictionaries
     print('[-] Building users dictionary...')
@@ -1016,16 +1172,21 @@ async def query_ldap_with_paging(ldap_client, base_dn, search_filter_custom,
     
     # Paging for AD LDAP Queries
     output_list = []
+    entry_count = 0
     
     try:
         async for entry, err in ldap_client.pagedsearch(
             search_filter_custom, attributes, tree=base_dn, search_scope=2
         ):
             if err is not None:
-                print(f'[!] Error during search: {err}')
+                # Log specific error types for better debugging
+                error_type = type(err).__name__
+                print(f'[!] LDAP Error ({error_type}): {err}')
+                logging.error(f'LDAP search error: {error_type} - {err}')
                 continue
                 
             if entry and 'attributes' in entry:
+                entry_count += 1
                 if output_object is None:
                     output_list.append(entry['attributes'])
                 else:
@@ -1036,8 +1197,20 @@ async def query_ldap_with_paging(ldap_client, base_dn, search_filter_custom,
                     actual_delay = calculate_stealth_delay(delay, jitter)
                     await asyncio.sleep(actual_delay)
                     
+                # Optional: Progress indicator for large queries
+                if entry_count > 0 and entry_count % 1000 == 0:
+                    print(f'[i] Processed {entry_count} entries...')
+                    
     except Exception as e:
-        print(f'[!] Error in paged search: {e}')
+        error_type = type(e).__name__
+        print(f'[!] Critical error in paged search ({error_type}): {e}')
+        logging.error(f'Critical paged search error: {error_type} - {e}')
+        # Re-raise critical errors that should stop execution
+        if 'authentication' in str(e).lower() or 'bind' in str(e).lower():
+            raise e
+        
+    if entry_count > 0:
+        logging.info(f'Successfully retrieved {entry_count} entries for filter: {search_filter_custom}')
         
     return output_list
 
@@ -1251,9 +1424,8 @@ async def main():
         help='Query timeout in seconds (default: 30)'
     )
     parser.add_argument(
-        '--verbosity', default='BASIC',
-        choices=['OFF', 'ERROR', 'BASIC', 'PROTOCOL', 'NETWORK', 'EXTENDED'],
-        help='Log verbosity level (default: BASIC)'
+        '--debug', action='store_true',
+        help='Enable debug logging (shows detailed msldap internal operations)'
     )
     parser.add_argument(
         '--legacy', action='store_true',
@@ -1357,11 +1529,12 @@ async def main():
             args.password = getpass()
 
     # Set Logger format
-    if args.verbosity != 'OFF':
+    if args.debug:
         # Ensure the directory for the log file exists
         import os
         log_file_path = args.filename_prepend + 'Log.txt'
         log_dir = os.path.dirname(log_file_path)
+        
         if log_dir and not os.path.exists(log_dir):
             try:
                 os.makedirs(log_dir, exist_ok=True)
@@ -1381,23 +1554,38 @@ async def main():
             # Force UTC
             logging.Formatter.converter = gmtime
             print(f'[i] Log file successfully initialized: {log_file_path}')
+            
+            # Log session start information
+            logging.info('=== AD-LDAP-ENUM Session Started ===')
+            logging.info(f'Target: {args.ldap_server}:{port} (Domain: {args.domain})')
+            logging.info(f'Method: {args.method.upper()}, Auth: {"Kerberos" if args.use_kerberos else "NTLM" if args.username else "Anonymous"}')
+            logging.info(f'Debug Mode: Enabled, Page Size: {args.page_size}')
+            if args.delay > 0:
+                logging.info(f'OPSEC: Delay={args.delay}s, Jitter={args.jitter}')
+            
+            # Verify the log file was actually created
+            if os.path.exists(log_file_path):
+                print(f'[i] Log file confirmed to exist: {log_file_path}')
+            else:
+                print(f'[!] Warning: Log file does not exist after initialization: {log_file_path}')
+                
         except Exception as log_error:
             print(f'[!] Warning: Could not create log file {log_file_path}: {log_error}')
             print(f'[!] Logging will be disabled for this session')
 
     # Configure msldap logging level
-    if args.verbosity == 'ERROR':
-        logging.getLogger('msldap').setLevel(logging.ERROR)
-    elif args.verbosity == 'BASIC':
-        logging.getLogger('msldap').setLevel(logging.INFO)
-    elif args.verbosity == 'PROTOCOL':
-        logging.getLogger('msldap').setLevel(logging.DEBUG)
-    elif args.verbosity == 'NETWORK':
-        logging.getLogger('msldap').setLevel(logging.DEBUG)
-    elif args.verbosity == 'EXTENDED':
-        logging.getLogger('msldap').setLevel(logging.DEBUG)
+    # msldap uses a single logger instance, so we configure the main 'msldap' logger
+    msldap_logger = logging.getLogger('msldap')
+    
+    if args.debug:
+        # Debug mode: show all msldap internal operations
+        # - Connection establishment and bind processes  
+        # - LDAP search filters and query details
+        # - Message processing and credential information
+        msldap_logger.setLevel(logging.DEBUG)
     else:
-        logging.getLogger('msldap').setLevel(logging.WARNING)
+        # Non-debug mode: only show warnings and errors
+        msldap_logger.setLevel(logging.WARNING)
 
     # Build the baseDN for searching (always based on domain, not bind DN)
     if args.alt_domain:
@@ -1488,7 +1676,7 @@ async def main():
               (args.ldap_server, port))
         
         # Debug: print URL without password for troubleshooting
-        if args.verbosity in ['PROTOCOL', 'NETWORK', 'EXTENDED']:
+        if args.debug:
             safe_url = url.replace(f':{encoded_password if "encoded_password" in locals() else args.password}@', ':***@')
             print(f'[DEBUG] Connection URL: {safe_url}')
         
@@ -1533,18 +1721,40 @@ async def main():
         import asyncio
         await asyncio.sleep(0.5)
         
+        # Log successful connection
+        logging.info(f'LDAP connection established to {args.ldap_server}:{port}')
+        
+        # Test authentication with whoami before proceeding
+        try:
+            whoami_result = await ldap_client.whoami()
+            if whoami_result:
+                print(f'[i] Authenticated as: {whoami_result}')
+                logging.info(f'Authentication verified: {whoami_result}')
+            else:
+                print('[i] Authentication successful (anonymous or limited info)')
+                logging.info('Authentication verified (no whoami info available)')
+        except Exception as whoami_error:
+            print(f'[!] Authentication verification failed: {whoami_error}')
+            logging.error(f'whoami() failed: {whoami_error}')
+            # Continue anyway as some servers may not support whoami
+        
         # Verify bind status by checking if we can perform a simple search
         try:
             # Test with a simple search to verify binding is complete
-            test_result = await ldap_client.pagedsearch(
-                base_dn, 
+            async for entry, err in ldap_client.pagedsearch(
                 '(objectClass=*)', 
-                attributes=['objectClass'],
-                size_limit=1
-            )
-            print(f'[i] Authentication binding completed successfully')
+                ['objectClass'],
+                tree=base_dn, 
+                search_scope=2
+            ):
+                # Just need to verify we can search - break after first result
+                if entry or err:
+                    break
+            print(f'[i] LDAP search capability confirmed')
+            logging.info('LDAP search capability verified successfully')
         except Exception as bind_error:
-            print(f'[!] Bind verification failed: {bind_error}')
+            print(f'[!] LDAP search verification failed: {bind_error}')
+            logging.error(f'Search verification failed: {bind_error}')
             raise bind_error
         
     except Exception as e:
@@ -1553,13 +1763,26 @@ async def main():
         exit(1)
 
     print('[-] Success')
+    
+    # Get enhanced server information
+    try:
+        server_info = await get_server_info_enhanced(ldap_client)
+        if server_info and args.debug:
+            logging.debug(f'Server information: {server_info}')
+    except Exception as e:
+        print(f'[!] Could not retrieve server information: {e}')
+        logging.warning(f'Server info collection failed: {e}')
+    
     # Query LDAP
     try:
+        logging.info('Starting LDAP enumeration queries')
         await ldap_queries(
             ldap_client, base_dn, args.nested_groups, args.query_limit, args
         )
+        logging.info('LDAP enumeration completed successfully')
     except Exception as e:
         print(f'[e] Query error: {e}')
+        logging.error(f'Query error: {e}')
         logging.error(traceback.format_exc())
     finally:
         # Always ensure LDAP client is properly disconnected
@@ -1610,6 +1833,10 @@ async def main():
 
     # OPSEC: Clean up artifacts and sanitize logs
     cleanup_opsec_artifacts(args)
+    
+    # Log session completion
+    if args.debug:
+        logging.info('=== AD-LDAP-ENUM Session Completed ===')
     
     print('\n[i] Enumeration completed. Remember to review output files for sensitive data before sharing.')
 
