@@ -49,6 +49,31 @@ def is_ip_address(hostname):
     except ValueError:
         return False
 
+
+def resolve_hostname_to_ip(hostname):
+    """Resolve hostname to IP address for DC parameter.
+    
+    Args:
+        hostname (str): The hostname to resolve
+        
+    Returns:
+        str: IP address of the hostname, or original hostname if resolution fails
+    """
+    try:
+        # If it's already an IP address, return as-is
+        if is_ip_address(hostname):
+            return hostname
+        
+        # Resolve FQDN to IP address
+        import socket
+        ip_address = socket.gethostbyname(hostname)
+        return ip_address
+    except socket.gaierror as e:
+        print(f'[!] Warning: Could not resolve {hostname} to IP address: {e}')
+        print(f'[!] Using FQDN instead of IP for DC parameter')
+        return hostname
+
+
 def get_attribute_value(attributes, attr_name, default=''):
     """Helper function to safely extract attribute values from msldap response.
     
@@ -1395,10 +1420,13 @@ async def main():
                 # Kerberos authentication - use explicit kerberos auth method
                 from urllib.parse import quote
                 
+                # Resolve LDAP server to IP address for DC parameter
+                dc_ip = resolve_hostname_to_ip(args.ldap_server)
+                
                 if args.aesKey:
                     # AES key authentication - use kerberos-aes
                     encoded_key = quote(args.aesKey, safe='')
-                    url = f"{protocol}+kerberos-aes://{args.domain}\\{args.username}:{encoded_key}@{args.ldap_server}:{port}/?dc={args.ldap_server}"
+                    url = f"{protocol}+kerberos-aes://{args.domain}\\{args.username}:{encoded_key}@{args.ldap_server}:{port}/?dc={dc_ip}"
                 elif args.hashes:
                     # NT hash format - use kerberos-nt (only NT hash part)
                     if ':' in args.hashes:
@@ -1406,14 +1434,14 @@ async def main():
                     else:
                         nt_hash = args.hashes  # Assume it's just the NT hash
                     encoded_hash = quote(nt_hash, safe='')
-                    url = f"{protocol}+kerberos-nt://{args.domain}\\{args.username}:{encoded_hash}@{args.ldap_server}:{port}/?dc={args.ldap_server}"
+                    url = f"{protocol}+kerberos-nt://{args.domain}\\{args.username}:{encoded_hash}@{args.ldap_server}:{port}/?dc={dc_ip}"
                 elif args.password:
                     # Password - use kerberos-password
                     encoded_password = quote(args.password, safe='')
-                    url = f"{protocol}+kerberos-password://{args.domain}\\{args.username}:{encoded_password}@{args.ldap_server}:{port}/?dc={args.ldap_server}"
+                    url = f"{protocol}+kerberos-password://{args.domain}\\{args.username}:{encoded_password}@{args.ldap_server}:{port}/?dc={dc_ip}"
                 else:
                     # Kerberos without credentials - use kerberos-ccache for cached credentials
-                    url = f"{protocol}+kerberos-ccache://{args.domain}\\{args.username}@{args.ldap_server}:{port}/?dc={args.ldap_server}"
+                    url = f"{protocol}+kerberos-ccache://{args.domain}\\{args.username}@{args.ldap_server}:{port}/?dc={dc_ip}"
             else:
                 # NTLM authentication - use explicit ntlm auth method
                 from urllib.parse import quote
