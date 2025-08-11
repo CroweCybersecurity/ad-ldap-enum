@@ -994,8 +994,7 @@ async def query_ldap_with_paging(ldap_client, base_dn, search_filter_custom,
     
     try:
         async for entry, err in ldap_client.pagedsearch(
-            search_filter_custom, attributes, tree=base_dn, search_scope=2,
-            size_limit=page_size
+            search_filter_custom, attributes, tree=base_dn, search_scope=2
         ):
             if err is not None:
                 print(f'[!] Error during search: {err}')
@@ -1014,8 +1013,6 @@ async def query_ldap_with_paging(ldap_client, base_dn, search_filter_custom,
                     
     except Exception as e:
         print(f'[!] Error in paged search: {e}')
-        
-    return output_list
         
     return output_list
 
