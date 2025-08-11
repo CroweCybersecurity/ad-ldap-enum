@@ -1379,14 +1379,15 @@ async def main():
                     # Kerberos without password - try kerberos scheme  
                     url = f"{protocol}+kerberos://{args.domain}\\{args.username}@{args.ldap_server}:{port}?dc_ip={args.ldap_server}"
             else:
-                # NTLM authentication
+                # NTLM authentication - need to specify scheme for proper auth
+                base_protocol = f"{protocol}+ntlm"
                 if ':' in args.password and len(args.password.split(':')) == 2:
                     # LM:NTLM hash format
-                    url = (f"{protocol}://{args.domain}\\{args.username}:"
+                    url = (f"{base_protocol}://{args.domain}\\{args.username}:"
                            f"{args.password}@{args.ldap_server}:{port}")
                 else:
                     # Plain password
-                    url = (f"{protocol}://{args.domain}\\{args.username}:"
+                    url = (f"{base_protocol}://{args.domain}\\{args.username}:"
                            f"{args.password}@{args.ldap_server}:{port}")
         else:
             print('[!] Error: No valid authentication method specified')
