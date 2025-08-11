@@ -1173,11 +1173,25 @@ async def main():
     
     parser.add_argument(
         '-k', '--kerberos', dest='use_kerberos', action='store_true',
-        help='Use Kerberos authentication'
+        help='Use Kerberos authentication. Grabs credentials from ccache file '
+             '(KRB5CCNAME) based on target parameters. If valid credentials '
+             'cannot be found, it will use the ones specified in the command line'
     )
     parser.add_argument(
         '-p', '--password',
-        help='Password, "LM:NT" hash, AES-128 key (32 hex), or AES-256 key (64 hex)'
+        help='Password for authentication'
+    )
+    parser.add_argument(
+        '-hashes', action="store", metavar="LMHASH:NTHASH", 
+        help='NTLM hashes, format is LMHASH:NTHASH'
+    )
+    parser.add_argument(
+        '-no-pass', action="store_true", 
+        help='Don\'t ask for password (useful for -k)'
+    )
+    parser.add_argument(
+        '-aesKey', action="store", metavar="hex key", 
+        help='AES key to use for Kerberos Authentication (128 or 256 bits)'
     )
     parser.add_argument(
         '-P', '--prompt', dest='password_prompt', action='store_true',
@@ -1301,14 +1315,21 @@ async def main():
             parser.error('Credential files (.ccache/.kirbi) require Kerberos authentication. Use -k flag.')
         if not args.username:
             parser.error('Username (-u) is required when using credential files (.ccache/.kirbi).')
-        if args.password:
-            parser.error('Cannot specify both password (-p) and credential file (--ccache/--kirbi).')
+        if args.password or args.hashes or args.aesKey:
+            parser.error('Cannot specify password/hashes/aesKey with credential files (--ccache/--kirbi).')
         if args.ccache_file and args.kirbi_file:
             parser.error('Cannot specify both .ccache and .kirbi files. Choose one.')
+    
+    # Validate mutually exclusive authentication methods
+    auth_methods = [args.password, args.hashes, args.aesKey]
+    provided_methods = [method for method in auth_methods if method is not None]
+    if len(provided_methods) > 1:
+        parser.error('Cannot specify multiple authentication methods. Choose one: -p, -hashes, or -aesKey.')
 
-    # If --prompt then overwrite args.password now
-    if args.password_prompt is True or (not args.password and not args.null_session and not args.use_kerberos):
-        args.password = getpass()
+    # If --prompt then overwrite args.password now (unless -no-pass is specified)
+    if args.password_prompt is True or (not any([args.password, args.hashes, args.aesKey, args.no_pass, args.null_session])):
+        if not args.no_pass:
+            args.password = getpass()
 
     # Set Logger format
     if args.verbosity != 'OFF':
@@ -1371,31 +1392,46 @@ async def main():
                    f"{args.password}@{args.ldap_server}:{port}")
         elif args.username:
             if args.use_kerberos:
-                # Kerberos authentication - use proper kerberos scheme
+                # Kerberos authentication - use explicit kerberos auth method
                 from urllib.parse import quote
                 
-                if args.password:
-                    # Kerberos with password - URL encode password
+                if args.aesKey:
+                    # AES key authentication - use kerberos-aes
+                    encoded_key = quote(args.aesKey, safe='')
+                    url = f"{protocol}+kerberos-aes://{args.domain}\\{args.username}:{encoded_key}@{args.ldap_server}:{port}/?dc={args.ldap_server}"
+                elif args.hashes:
+                    # NT hash format - use kerberos-nt (only NT hash part)
+                    if ':' in args.hashes:
+                        nt_hash = args.hashes.split(':')[1]  # Get NT hash part
+                    else:
+                        nt_hash = args.hashes  # Assume it's just the NT hash
+                    encoded_hash = quote(nt_hash, safe='')
+                    url = f"{protocol}+kerberos-nt://{args.domain}\\{args.username}:{encoded_hash}@{args.ldap_server}:{port}/?dc={args.ldap_server}"
+                elif args.password:
+                    # Password - use kerberos-password
                     encoded_password = quote(args.password, safe='')
-                    url = f"kerberos+{protocol}://{args.domain}\\{args.username}:{encoded_password}@{args.ldap_server}:{port}/?dc={args.ldap_server}"
+                    url = f"{protocol}+kerberos-password://{args.domain}\\{args.username}:{encoded_password}@{args.ldap_server}:{port}/?dc={args.ldap_server}"
                 else:
-                    # Kerberos without password - use cached credentials
-                    url = f"kerberos+{protocol}://{args.domain}\\{args.username}@{args.ldap_server}:{port}/?dc={args.ldap_server}"
+                    # Kerberos without credentials - use kerberos-ccache for cached credentials
+                    url = f"{protocol}+kerberos-ccache://{args.domain}\\{args.username}@{args.ldap_server}:{port}/?dc={args.ldap_server}"
             else:
-                # NTLM authentication - use standard ldap/ldaps scheme
+                # NTLM authentication - use explicit ntlm auth method
                 from urllib.parse import quote
                 
-                # URL encode the password to handle special characters
-                encoded_password = quote(args.password, safe='')
-                
-                if ':' in args.password and len(args.password.split(':')) == 2:
-                    # LM:NTLM hash format
-                    url = (f"{protocol}://{args.domain}\\{args.username}:"
-                           f"{encoded_password}@{args.ldap_server}:{port}")
+                if args.hashes:
+                    # NTLM hash format - use ntlm-nt and only NT hash part
+                    if ':' in args.hashes:
+                        nt_hash = args.hashes.split(':')[1]  # Get NT hash part
+                    else:
+                        nt_hash = args.hashes  # Assume it's just the NT hash
+                    encoded_nt_hash = quote(nt_hash, safe='')
+                    url = f"{protocol}+ntlm-nt://{args.domain}\\{args.username}:{encoded_nt_hash}@{args.ldap_server}:{port}"
+                elif args.password:
+                    # Plain password - use ntlm-password
+                    encoded_password = quote(args.password, safe='')
+                    url = f"{protocol}+ntlm-password://{args.domain}\\{args.username}:{encoded_password}@{args.ldap_server}:{port}"
                 else:
-                    # Plain password
-                    url = (f"{protocol}://{args.domain}\\{args.username}:"
-                           f"{encoded_password}@{args.ldap_server}:{port}")
+                    parser.error('NTLM authentication requires either password (-p) or hashes (-hashes).')
                            
                 print(f'[i] Using NTLM authentication for user: {args.domain}\\{args.username}')
         else:
@@ -1418,21 +1454,20 @@ async def main():
                 print(f'[i] Using Kerberos authentication with .ccache file for user: {user_display}')
             elif args.kirbi_file:
                 print(f'[i] Using Kerberos authentication with .kirbi file for user: {user_display}')
-            elif args.password:
-                # Check if using hash/key format for Kerberos PTH
-                if (':' in args.password and len(args.password.split(':')) == 2) or \
-                   (len(args.password) == 32 and all(c in '0123456789abcdefABCDEF' for c in args.password)) or \
-                   (len(args.password) == 64 and all(c in '0123456789abcdefABCDEF' for c in args.password)):
-                    if len(args.password) == 64:
-                        print(f'[i] Using Kerberos Pass-the-Hash authentication with AES-256 key for user: {user_display}')
-                    elif len(args.password) == 32:
-                        print(f'[i] Using Kerberos Pass-the-Hash authentication with AES-128 key for user: {user_display}')
-                    elif ':' in args.password:
-                        print(f'[i] Using Kerberos Pass-the-Hash authentication with NT hash (RC4) for user: {user_display}')
+            elif args.aesKey:
+                # Determine AES key size
+                if len(args.aesKey) == 32:
+                    print(f'[i] Using Kerberos authentication with AES-128 key for user: {user_display}')
+                elif len(args.aesKey) == 64:
+                    print(f'[i] Using Kerberos authentication with AES-256 key for user: {user_display}')
                 else:
-                    print(f'[i] Using Kerberos authentication with password for user: {user_display}')
+                    print(f'[i] Using Kerberos authentication with AES key for user: {user_display}')
+            elif args.hashes:
+                print(f'[i] Using Kerberos Pass-the-Hash authentication with NT hash (RC4) for user: {user_display}')
+            elif args.password:
+                print(f'[i] Using Kerberos authentication with password for user: {user_display}')
             else:
-                print(f'[i] Using Kerberos authentication (cached/prompt) for user: {user_display}')
+                print(f'[i] Using Kerberos authentication (cached credentials) for user: {user_display}')
         
         if channel_binding_info:
             print(f'[i] Attempting connection with {channel_binding_info} channel binding')
