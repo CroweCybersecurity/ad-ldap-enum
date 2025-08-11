@@ -1358,14 +1358,32 @@ async def main():
 
     # Set Logger format
     if args.verbosity != 'OFF':
-        print('[-] Writing logs to "%sLog.txt"...' % args.filename_prepend)
-        logging.basicConfig(
-            format='%(asctime)s %(levelname)-8s %(message)s',
-            datefmt='%Y-%m-%dT%H:%M:%SZ', level=logging.DEBUG,
-            filename=args.filename_prepend + 'Log.txt', filemode='a'
-        )
-        # Force UTC
-        logging.Formatter.converter = gmtime
+        # Ensure the directory for the log file exists
+        import os
+        log_file_path = args.filename_prepend + 'Log.txt'
+        log_dir = os.path.dirname(log_file_path)
+        if log_dir and not os.path.exists(log_dir):
+            try:
+                os.makedirs(log_dir, exist_ok=True)
+                print(f'[i] Created directory: {log_dir}')
+            except Exception as dir_error:
+                print(f'[!] Warning: Could not create log directory {log_dir}: {dir_error}')
+                print(f'[!] Attempting to create log file in current directory instead')
+                log_file_path = 'ad-ldap-enum_Log.txt'
+        
+        print('[-] Writing logs to "%s"...' % log_file_path)
+        try:
+            logging.basicConfig(
+                format='%(asctime)s %(levelname)-8s %(message)s',
+                datefmt='%Y-%m-%dT%H:%M:%SZ', level=logging.DEBUG,
+                filename=log_file_path, filemode='a'
+            )
+            # Force UTC
+            logging.Formatter.converter = gmtime
+            print(f'[i] Log file successfully initialized: {log_file_path}')
+        except Exception as log_error:
+            print(f'[!] Warning: Could not create log file {log_file_path}: {log_error}')
+            print(f'[!] Logging will be disabled for this session')
 
     # Configure msldap logging level
     if args.verbosity == 'ERROR':
@@ -1510,6 +1528,24 @@ async def main():
             print('[i] Channel binding framework ready - awaiting msldap library support')
             
         await ldap_client.connect()
+        
+        # Wait a moment for bind to complete
+        import asyncio
+        await asyncio.sleep(0.5)
+        
+        # Verify bind status by checking if we can perform a simple search
+        try:
+            # Test with a simple search to verify binding is complete
+            test_result = await ldap_client.pagedsearch(
+                base_dn, 
+                '(objectClass=*)', 
+                attributes=['objectClass'],
+                size_limit=1
+            )
+            print(f'[i] Authentication binding completed successfully')
+        except Exception as bind_error:
+            print(f'[!] Bind verification failed: {bind_error}')
+            raise bind_error
         
     except Exception as e:
         print(f'[e] Connection error: {e}')
