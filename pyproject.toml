@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ad-ldap-enum"
+version = "0.1.0"
+description = "Active Directory LDAP enumerator using msldap with Impacket-style target syntax."
+readme = { text = "Active Directory LDAP enumerator that supports NTLM and Kerberos schemes via msldap, CSV output, and optional Excel export." }
+requires-python = ">=3.8"
+authors = [{ name = "Your Name" }]
+
+dependencies = [
+  "msldap>=0.5.15,<0.6.0",
+  "openpyxl>=3.1.2,<4.0",
+]
+
+# If you keep the file name 'ad_enum.py' at the project root,
+# ship it as a single-module package.
+[tool.setuptools]
+py-modules = ["ad_enum"]
+
+# Tip: After `pip install .`, you can run:
+#   python -m ad_enum <TARGET and flags...>
+#
+# If you later add a tiny wrapper function (e.g., def cli(): asyncio.run(main())),
+# you can expose a console script like this:
+# [project.scripts]
+# ad-ldap-enum = "ad_enum:cli"

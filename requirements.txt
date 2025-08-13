@@ -1,3 +1,2 @@
-argcomplete
-msldap==0.5.15
-openpyxl
+msldap>=0.5.15,<0.6.0
+openpyxl>=3.1.2,<4.0
