@@ -30,7 +30,6 @@ import datetime
 import inspect
 import ipaddress
 import logging
-import os
 import struct
 import sys
 import traceback
@@ -46,7 +45,8 @@ from openpyxl import Workbook, load_workbook
 # ----------------------------
 # Constants / Defaults
 # ----------------------------
-DEFAULT_PAGE_SIZE = 1000
+MAX_AD_PAGE_SIZE = 1000
+DEFAULT_PAGE_SIZE = MAX_AD_PAGE_SIZE
 USER_CSV = 'Extended_Domain_User_Information'
 GROUP_CSV = 'Domain_Group_Membership'
 COMP_CSV = 'Extended_Domain_Computer_Information'
@@ -161,6 +161,14 @@ def calculate_stealth_delay(base_delay: float, jitter_percent: float = 0.0) -> f
         jitter = base_delay * jitter_percent * random.uniform(-1, 1)
         return max(0.0, base_delay + jitter)
     return base_delay
+
+
+def clamp_page_size(value: int) -> int:
+    """Clamp requested page size to AD MaxPageSize (1..1000)."""
+    try:
+        return max(1, min(int(value), MAX_AD_PAGE_SIZE))
+    except Exception:
+        return MAX_AD_PAGE_SIZE
 
 
 # ---------- Info Helpers ----------
@@ -312,6 +320,7 @@ class ADGroup:
 def _get_paged_kwargs(ldap_client, base_dn: str, page_size: int, query_limit: int) -> Dict[str, Any]:
     """Build kwargs for pagedsearch tolerating msldap signature differences."""
     kwargs: Dict[str, Any] = {'tree': base_dn, 'search_scope': 2}
+    page_size = clamp_page_size(page_size)
     try:
         sig = inspect.signature(ldap_client.pagedsearch)
         if 'page_size' in sig.parameters:
@@ -473,8 +482,9 @@ async def ldap_queries(ldap_client, base_dn: str, expand_nested: bool, query_lim
     computers_dictionary: Dict[str, ADComputer] = {}
     group_id_to_dn: Dict[str, str] = {}
 
-    use_builtin = all(hasattr(ldap_client, m) for m in ['get_all_users', 'get_all_groups', 'get_all_machines'])
-    print('[i] Using optimized msldap built-in methods for enumeration' if use_builtin and not args.debug else '[i] Using custom LDAP filters for enumeration')
+    # Safe path: msldap get_all_* return async generators; use custom paged search for consistency.
+    use_builtin = False
+    print('[i] Using custom LDAP filters for enumeration')
 
     user_filter = '(objectcategory=user)'
     user_attrs = [
@@ -506,11 +516,10 @@ async def ldap_queries(ldap_client, base_dn: str, expand_nested: bool, query_lim
 
     print('[-] Querying users...')
     try:
-        if use_builtin:
-            users_raw = await ldap_client.get_all_users()
-            users = [ADUser(u) for u in users_raw]
-        else:
-            users = await query_ldap_with_paging(ldap_client, base_dn, user_filter, user_attrs, query_limit, ADUser, args.page_size)
+        users = await query_ldap_with_paging(
+            ldap_client, base_dn, user_filter, user_attrs, query_limit, ADUser,
+            page_size=args.page_size, delay=args.delay, jitter=args.jitter
+        )
         print(f'[i] Found {len(users)} users')
     except Exception as e:
         print(f'[!] Error querying users: {e}')
@@ -518,11 +527,10 @@ async def ldap_queries(ldap_client, base_dn: str, expand_nested: bool, query_lim
 
     print('[-] Querying groups...')
     try:
-        if use_builtin:
-            groups_raw = await ldap_client.get_all_groups()
-            groups = [ADGroup(g) for g in groups_raw]
-        else:
-            groups = await query_ldap_with_paging(ldap_client, base_dn, group_filter, group_attrs, query_limit, ADGroup, args.page_size)
+        groups = await query_ldap_with_paging(
+            ldap_client, base_dn, group_filter, group_attrs, query_limit, ADGroup,
+            page_size=args.page_size, delay=args.delay, jitter=args.jitter
+        )
         print(f'[i] Found {len(groups)} groups')
     except Exception as e:
         print(f'[!] Error querying groups: {e}')
@@ -530,11 +538,10 @@ async def ldap_queries(ldap_client, base_dn: str, expand_nested: bool, query_lim
 
     print('[-] Querying computers...')
     try:
-        if use_builtin:
-            comps_raw = await ldap_client.get_all_machines()
-            computers = [ADComputer(c) for c in comps_raw]
-        else:
-            computers = await query_ldap_with_paging(ldap_client, base_dn, computer_filter, comp_attrs, query_limit, ADComputer, args.page_size)
+        computers = await query_ldap_with_paging(
+            ldap_client, base_dn, computer_filter, comp_attrs, query_limit, ADComputer,
+            page_size=args.page_size, delay=args.delay, jitter=args.jitter
+        )
         print(f'[i] Found {len(computers)} computers')
     except Exception as e:
         print(f'[!] Error querying computers: {e}')
@@ -675,7 +682,8 @@ async def main():
     opsec = parser.add_argument_group('OPSEC')
     opsec.add_argument('--delay', type=float, default=0.0, help='Delay in seconds between LDAP pages')
     opsec.add_argument('--jitter', type=float, default=0.0, help='Random jitter percentage (0.0-1.0)')
-    opsec.add_argument('--page-size', type=int, default=DEFAULT_PAGE_SIZE, help='LDAP page size')
+    opsec.add_argument('--page-size', type=int, default=DEFAULT_PAGE_SIZE,
+                       help='LDAP page size (1–1000; AD MaxPageSize is 1000)')
 
     # Scope
     parser.add_argument('-a', '--alt-domain', dest='alt_domain',
@@ -684,6 +692,17 @@ async def main():
                         help='Expand nested groups')
 
     args = parser.parse_args()
+
+    # Enforce and warn on page-size limits (AD MaxPageSize = 1000)
+    try:
+        requested_ps = int(args.page_size)
+    except Exception:
+        requested_ps = DEFAULT_PAGE_SIZE
+    if requested_ps > MAX_AD_PAGE_SIZE:
+        print(f'[!] Requested --page-size {requested_ps} exceeds AD MaxPageSize {MAX_AD_PAGE_SIZE}; forcing {MAX_AD_PAGE_SIZE}.')
+    elif requested_ps < 1:
+        print(f'[!] Requested --page-size {requested_ps} is < 1; forcing 1.')
+    args.page_size = clamp_page_size(requested_ps)
 
     # Identity exclusivity / requirements
     if not args.target and not args.distinguished_name:
