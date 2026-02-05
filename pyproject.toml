@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ad-ldap-enum"
-version = "3.0"
+version = "3.0.0"
 description = "Active Directory LDAP enumerator using msldap with Impacket-style target syntax."
-readme = { text = "Active Directory LDAP enumerator that supports NTLM and Kerberos schemes via msldap and easy output formats." }
+readme = { text = "Active Directory LDAP enumerator that supports NTLM and Kerberos schemes via msldap and easy output formats.", content-type = "text/plain" }
 requires-python = ">=3.10"
 authors = [{ name = "Crowe LLP" }]
 

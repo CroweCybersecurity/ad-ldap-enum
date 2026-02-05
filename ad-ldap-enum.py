@@ -32,8 +32,14 @@ COMP_CSV = 'Extended_Domain_Computer_Information'
 
 # Suppress asyncio warnings on Windows
 if sys.platform == 'win32':
-    warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*Event loop is closed.*")
-    warnings.filterwarnings("ignore", message=".*unclosed.*", category=ResourceWarning)
+    warnings.filterwarnings(
+        "ignore",
+        category=RuntimeWarning,
+        message=".*Event loop is closed.*")
+    warnings.filterwarnings(
+        "ignore",
+        message=".*unclosed.*",
+        category=ResourceWarning)
 
 
 # ---------- Utilities ----------
@@ -60,13 +66,15 @@ def resolve_hostname_to_ip(hostname: str) -> str:
         return hostname
 
 
-def parse_impacket_target(target: str) -> Tuple[str, str, Optional[str], Optional[str]]:
+def parse_impacket_target(
+        target: str) -> Tuple[str, str, Optional[str], Optional[str]]:
     """
     Parse 'domain.tld/username[:password]@OptionalHost'
     Returns (domain, username, password|None, host|None)
     """
     if not target or '/' not in target:
-        raise ValueError("TARGET must be domain.tld/username[:password]@OptionalHost")
+        raise ValueError(
+            "TARGET must be domain.tld/username[:password]@OptionalHost")
 
     left, host = (target, None)
     if '@' in target:
@@ -92,7 +100,8 @@ def parse_impacket_target(target: str) -> Tuple[str, str, Optional[str], Optiona
     return domain, username, password, host
 
 
-def get_attribute_value(attributes: Dict[str, Any], attr_name: str, default: Any = '') -> Any:
+def get_attribute_value(
+        attributes: Dict[str, Any], attr_name: str, default: Any = '') -> Any:
     """Safely extract attribute values from msldap response."""
     if not attributes:
         return default
@@ -133,7 +142,9 @@ def sid_to_string(sid_binary: Any) -> str:
             return f'<SID conversion failed: {type(sid_binary)}>'
 
 
-def calculate_stealth_delay(base_delay: float, jitter_percent: float = 0.0) -> float:
+def calculate_stealth_delay(
+        base_delay: float,
+        jitter_percent: float = 0.0) -> float:
     """Calculate delay with optional jitter for OPSEC."""
     if jitter_percent > 0.0:
         import random
@@ -183,21 +194,48 @@ class ADUser:
     """Representation of an AD user."""
 
     def __init__(self, retrieved_attributes: Dict[str, Any]):
-        self.distinguished_name = get_attribute_value(retrieved_attributes, 'distinguishedName')
-        self.sam_account_name = get_attribute_value(retrieved_attributes, 'sAMAccountName')
-        self.user_account_control = get_attribute_value(retrieved_attributes, 'userAccountControl')
-        self.primary_group_id = get_attribute_value(retrieved_attributes, 'primaryGroupID')
-        self.comment = str(get_attribute_value(retrieved_attributes, 'comment') or '').replace('\t', '*TAB*').replace('\r', '*CR*').replace('\n', '*LF*')
-        self.description = str(get_attribute_value(retrieved_attributes, 'description') or '').replace('\t', '*TAB*').replace('\r', '*CR*').replace('\n', '*LF*')
-        self.home_directory = get_attribute_value(retrieved_attributes, 'homeDirectory')
-        self.display_name = get_attribute_value(retrieved_attributes, 'displayName')
+        self.distinguished_name = get_attribute_value(
+            retrieved_attributes, 'distinguishedName')
+        self.sam_account_name = get_attribute_value(
+            retrieved_attributes, 'sAMAccountName')
+        self.user_account_control = get_attribute_value(
+            retrieved_attributes, 'userAccountControl')
+        self.primary_group_id = get_attribute_value(
+            retrieved_attributes, 'primaryGroupID')
+        self.comment = (
+            str(get_attribute_value(retrieved_attributes, 'comment') or '')
+            .replace('\t', '*TAB*')
+            .replace('\r', '*CR*')
+            .replace('\n', '*LF*')
+        )
+        self.description = (
+            str(get_attribute_value(retrieved_attributes, 'description') or '')
+            .replace('\t', '*TAB*')
+            .replace('\r', '*CR*')
+            .replace('\n', '*LF*')
+        )
+        self.home_directory = get_attribute_value(
+            retrieved_attributes, 'homeDirectory')
+        self.display_name = get_attribute_value(
+            retrieved_attributes, 'displayName')
         self.mail = get_attribute_value(retrieved_attributes, 'mail')
-        self.password_last_set = get_attribute_value(retrieved_attributes, 'pwdLastSet')
-        self.last_logon = get_attribute_value(retrieved_attributes, 'lastLogon')
-        self.profile_path = get_attribute_value(retrieved_attributes, 'profilePath')
-        self.locked_out = 'YES' if (get_attribute_value(retrieved_attributes, 'lockoutTime') and str(get_attribute_value(retrieved_attributes, 'lockoutTime')) != '0') else 'NO'
-        self.logon_script = get_attribute_value(retrieved_attributes, 'scriptPath')
-        self.user_password = get_attribute_value(retrieved_attributes, 'userPassword')
+        self.password_last_set = get_attribute_value(
+            retrieved_attributes, 'pwdLastSet')
+        self.last_logon = get_attribute_value(
+            retrieved_attributes, 'lastLogon')
+        self.profile_path = get_attribute_value(
+            retrieved_attributes, 'profilePath')
+        self.locked_out = 'YES' if (
+            get_attribute_value(
+                retrieved_attributes,
+                'lockoutTime') and str(
+                get_attribute_value(
+                    retrieved_attributes,
+                    'lockoutTime')) != '0') else 'NO'
+        self.logon_script = get_attribute_value(
+            retrieved_attributes, 'scriptPath')
+        self.user_password = get_attribute_value(
+            retrieved_attributes, 'userPassword')
         sid_binary = get_attribute_value(retrieved_attributes, 'objectSid')
         self.object_sid = sid_to_string(sid_binary) if sid_binary else ''
 
@@ -227,7 +265,8 @@ class ADUser:
             if self.password_last_set and int(self.password_last_set) != 0:
                 val = int(self.password_last_set)
                 epoch = (val / 10000000) - 11644473600
-                return datetime.datetime.utcfromtimestamp(epoch).strftime('%Y-%m-%d %H:%M:%S UTC')
+                return datetime.datetime.utcfromtimestamp(
+                    epoch).strftime('%Y-%m-%d %H:%M:%S UTC')
         except Exception:
             pass
         return str(self.password_last_set or '')
@@ -237,7 +276,8 @@ class ADUser:
             if self.last_logon and int(self.last_logon) != 0:
                 val = int(self.last_logon)
                 epoch = (val / 10000000) - 11644473600
-                return datetime.datetime.utcfromtimestamp(epoch).strftime('%Y-%m-%d %H:%M:%S UTC')
+                return datetime.datetime.utcfromtimestamp(
+                    epoch).strftime('%Y-%m-%d %H:%M:%S UTC')
         except Exception:
             pass
         return str(self.last_logon or '')
@@ -247,17 +287,29 @@ class ADComputer:
     """Representation of an AD computer."""
 
     def __init__(self, retrieved_attributes: Dict[str, Any]):
-        self.distinguished_name = get_attribute_value(retrieved_attributes, 'distinguishedName')
-        self.sam_account_name = get_attribute_value(retrieved_attributes, 'sAMAccountName')
-        self.primary_group_id = get_attribute_value(retrieved_attributes, 'primaryGroupID')
-        self.operating_system = get_attribute_value(retrieved_attributes, 'operatingSystem')
-        self.operating_system_hotfix = get_attribute_value(retrieved_attributes, 'operatingSystemHotfix')
-        self.operating_system_service_pack = get_attribute_value(retrieved_attributes, 'operatingSystemServicePack')
-        self.operating_system_version = get_attribute_value(retrieved_attributes, 'operatingSystemVersion')
-        spns = get_attribute_value(retrieved_attributes, 'servicePrincipalName')
-        self.service_principal_names = spns if isinstance(spns, list) else ([spns] if spns else [])
-        self.last_logon = get_attribute_value(retrieved_attributes, 'lastLogon')
-        self.password_last_set = get_attribute_value(retrieved_attributes, 'pwdLastSet')
+        self.distinguished_name = get_attribute_value(
+            retrieved_attributes, 'distinguishedName')
+        self.sam_account_name = get_attribute_value(
+            retrieved_attributes, 'sAMAccountName')
+        self.primary_group_id = get_attribute_value(
+            retrieved_attributes, 'primaryGroupID')
+        self.operating_system = get_attribute_value(
+            retrieved_attributes, 'operatingSystem')
+        self.operating_system_hotfix = get_attribute_value(
+            retrieved_attributes, 'operatingSystemHotfix')
+        self.operating_system_service_pack = get_attribute_value(
+            retrieved_attributes, 'operatingSystemServicePack')
+        self.operating_system_version = get_attribute_value(
+            retrieved_attributes, 'operatingSystemVersion')
+        spns = get_attribute_value(
+            retrieved_attributes,
+            'servicePrincipalName')
+        self.service_principal_names = spns if isinstance(
+            spns, list) else ([spns] if spns else [])
+        self.last_logon = get_attribute_value(
+            retrieved_attributes, 'lastLogon')
+        self.password_last_set = get_attribute_value(
+            retrieved_attributes, 'pwdLastSet')
         sid_binary = get_attribute_value(retrieved_attributes, 'objectSid')
         self.object_sid = sid_to_string(sid_binary) if sid_binary else ''
 
@@ -266,7 +318,8 @@ class ADComputer:
             if self.password_last_set and int(self.password_last_set) != 0:
                 val = int(self.password_last_set)
                 epoch = (val / 10000000) - 11644473600
-                return datetime.datetime.utcfromtimestamp(epoch).strftime('%Y-%m-%d %H:%M:%S UTC')
+                return datetime.datetime.utcfromtimestamp(
+                    epoch).strftime('%Y-%m-%d %H:%M:%S UTC')
         except Exception:
             pass
         return str(self.password_last_set or '')
@@ -276,7 +329,8 @@ class ADComputer:
             if self.last_logon and int(self.last_logon) != 0:
                 val = int(self.last_logon)
                 epoch = (val / 10000000) - 11644473600
-                return datetime.datetime.utcfromtimestamp(epoch).strftime('%Y-%m-%d %H:%M:%S UTC')
+                return datetime.datetime.utcfromtimestamp(
+                    epoch).strftime('%Y-%m-%d %H:%M:%S UTC')
         except Exception:
             pass
         return str(self.last_logon or '')
@@ -286,17 +340,24 @@ class ADGroup:
     """Representation of an AD group."""
 
     def __init__(self, retrieved_attributes: Dict[str, Any]):
-        self.distinguished_name = get_attribute_value(retrieved_attributes, 'distinguishedName')
-        self.sam_account_name = get_attribute_value(retrieved_attributes, 'sAMAccountName')
-        self.primary_group_token = get_attribute_value(retrieved_attributes, 'primaryGroupToken')
+        self.distinguished_name = get_attribute_value(
+            retrieved_attributes, 'distinguishedName')
+        self.sam_account_name = get_attribute_value(
+            retrieved_attributes, 'sAMAccountName')
+        self.primary_group_token = get_attribute_value(
+            retrieved_attributes, 'primaryGroupToken')
         members = get_attribute_value(retrieved_attributes, 'member')
-        self.members = members if isinstance(members, list) else ([members] if members else [])
-        self.is_large_group = any(k.lower().startswith('member;range') for k in retrieved_attributes.keys())
+        self.members = members if isinstance(
+            members, list) else (
+            [members] if members else [])
+        self.is_large_group = any(k.lower().startswith(
+            'member;range') for k in retrieved_attributes.keys())
 
 
 # ---------- LDAP Helpers ----------
 
-def _get_paged_kwargs(ldap_client, base_dn: str, page_size: int, query_limit: int) -> Dict[str, Any]:
+def _get_paged_kwargs(ldap_client, base_dn: str,
+                      page_size: int, query_limit: int) -> Dict[str, Any]:
     """Build kwargs for pagedsearch tolerating msldap signature differences."""
     kwargs: Dict[str, Any] = {'tree': base_dn}
     page_size = clamp_page_size(page_size)
@@ -326,41 +387,96 @@ async def query_ldap_with_paging(
     delay: float = 0.0,
     jitter: float = 0.0,
 ) -> List[Any]:
-    """Get all AD results with paging. Applies --page-size and --query_limit if supported."""
+    """Get all AD results with paging.
+
+    Applies --page-size and --query_limit if supported.
+    """
     output_list: List[Any] = []
     entry_count = 0
     kwargs = _get_paged_kwargs(ldap_client, base_dn, page_size, query_limit)
 
     try:
-        async for entry, err in ldap_client.pagedsearch(search_filter_custom, attributes, **kwargs):
+        async for entry, err in ldap_client.pagedsearch(
+                search_filter_custom, attributes, **kwargs):
             if err is not None:
-                logging.error('LDAP search error: %s - %s', type(err).__name__, err)
+                logging.error(
+                    'LDAP search error: %s - %s',
+                    type(err).__name__,
+                    err)
                 continue
             if entry and 'attributes' in entry:
                 entry_count += 1
-                output_list.append(entry['attributes'] if output_object is None else output_object(entry['attributes']))
+                output_list.append(
+                    entry['attributes']
+                    if output_object is None
+                    else output_object(entry['attributes'])
+                )
                 if delay > 0.0:
                     await asyncio.sleep(calculate_stealth_delay(delay, jitter))
                 if entry_count % 1000 == 0:
                     print(f'[i] Processed {entry_count} entries...')
     except Exception as e:
-        logging.error('Critical paged search error: %s - %s', type(e).__name__, e)
+        logging.error(
+            'Critical paged search error: %s - %s',
+            type(e).__name__,
+            e)
         if 'authentication' in str(e).lower() or 'bind' in str(e).lower():
             raise
     return output_list
 
 
 def parse_spns(service_principle_names: Iterable[str]) -> List[List[str]]:
-    """Parse Service Principal Names into categorized lists (case-insensitive)."""
+    """Parse Service Principal Names into categorized lists.
+
+    Matching is case-insensitive.
+    """
     def normset(seq): return {s.casefold() for s in seq}
-    sql = normset(['MSSQLSvc', 'gateway', 'hbase', 'HBase', 'hdb', 'hdfs', 'hive', 'Kafka', 'mongod', 'mongos', 'MSOLAPSvc', 'MSSQL', 'oracle', 'postgres'])
+    sql = normset(['MSSQLSvc',
+                   'gateway',
+                   'hbase',
+                   'HBase',
+                   'hdb',
+                   'hdfs',
+                   'hive',
+                   'Kafka',
+                   'mongod',
+                   'mongos',
+                   'MSOLAPSvc',
+                   'MSSQL',
+                   'oracle',
+                   'postgres'])
     ra = normset(['vnc', 'WSMAN', 'TERMSRV', 'RPC', 'HTTP', 'https', 'jboss'])
-    share = normset(['cifs', 'CIFS', 'afpserver', 'AFServer', 'nfs', 'Dfsr-12F9A27C-BF97-9364-D31B6C55EB04', 'ftp', 'iSCSITarget'])
-    mail = normset(['SMTPSVC', 'SMTP', 'exchangeAB', 'exchangeMDB', 'exchangeRFR', 'IMAP', 'IMAP4', 'POP', 'POP3'])
-    auth = normset(['ldap', 'aradminsvc', 'DNS', 'FIMService', 'GC', 'kadmin', 'OA60'])
-    backup = normset(['AcronisAgent', 'Agent VProRecovery Norton Ghost 12.0', 'Backup Exec System Recovery Agent 6.0', 'LiveState Recovery Agent 6.0'])
-    mgmt = normset(['AdtServer', 'AgpmServer', 'CAXOsoftEngine', 'CAARCserveRHAEngine', 'Cognos', 'ckp_pdp', 'CmRcService', 'Hyper-V Replica Service',
-                    'Microsoft Virtual Console Service', 'MSClusterVirtualServer', 'MSServerCluster', 'MSOMHSvc', 'MSOMSdkSvc', 'PCNSCLNT', 'SCVMM'])
+    share = normset(['cifs',
+                     'CIFS',
+                     'afpserver',
+                     'AFServer',
+                     'nfs',
+                     'Dfsr-12F9A27C-BF97-9364-D31B6C55EB04',
+                     'ftp',
+                     'iSCSITarget'])
+    mail = normset(['SMTPSVC', 'SMTP', 'exchangeAB', 'exchangeMDB',
+                   'exchangeRFR', 'IMAP', 'IMAP4', 'POP', 'POP3'])
+    auth = normset(['ldap', 'aradminsvc', 'DNS',
+                   'FIMService', 'GC', 'kadmin', 'OA60'])
+    backup = normset(['AcronisAgent',
+                      'Agent VProRecovery Norton Ghost 12.0',
+                      'Backup Exec System Recovery Agent 6.0',
+                      'LiveState Recovery Agent 6.0'])
+    mgmt = normset(['AdtServer',
+                    'AgpmServer',
+                    'CAXOsoftEngine',
+                    'CAARCserveRHAEngine',
+                    'Cognos',
+                    'ckp_pdp',
+                    'CmRcService',
+                    'Hyper-V Replica Service',
+                    'Microsoft Virtual Console Service',
+                    'MSClusterVirtualServer',
+                    'MSServerCluster',
+                    'MSOMHSvc',
+                    'MSOMSdkSvc',
+                    'PCNSCLNT',
+                    'SCVMM'])
 
     buckets = [[] for _ in range(8)]
     for spn in (service_principle_names or []):
@@ -368,22 +484,41 @@ def parse_spns(service_principle_names: Iterable[str]) -> List[List[str]]:
         if s.startswith(("b'", 'b"')) and s.endswith(("'", '"')):
             s = s[2:-1]
         svc = s.split('/', 1)[0].casefold()
-        if svc in sql: buckets[0].append(s)
-        elif svc in ra: buckets[1].append(s)
-        elif svc in share: buckets[2].append(s)
-        elif svc in mail: buckets[3].append(s)
-        elif svc in auth: buckets[4].append(s)
-        elif svc in backup: buckets[5].append(s)
-        elif svc in mgmt: buckets[6].append(s)
-        else: buckets[7].append(s)
+        if svc in sql:
+            buckets[0].append(s)
+        elif svc in ra:
+            buckets[1].append(s)
+        elif svc in share:
+            buckets[2].append(s)
+        elif svc in mail:
+            buckets[3].append(s)
+        elif svc in auth:
+            buckets[4].append(s)
+        elif svc in backup:
+            buckets[5].append(s)
+        elif svc in mgmt:
+            buckets[6].append(s)
+        else:
+            buckets[7].append(s)
     return buckets
 
 
-async def build_membership_index(ldap_client, base_dn: str, query_limit: int, page_size: int) -> Dict[str, List[str]]:
-    """Single-pass scan of all objects' memberOf; invert to {group_dn: [member_dn, ...]}."""
+async def build_membership_index(ldap_client,
+                                 base_dn: str,
+                                 query_limit: int,
+                                 page_size: int) -> Dict[str,
+                                                         List[str]]:
+    """Single-pass scan of all objects' memberOf.
+
+    Invert to {group_dn: [member_dn, ...]}.
+    """
     print('[-] Building membership index via memberOf...')
     membership: Dict[str, List[str]] = defaultdict(list)
-    flt = '(|(objectCategory=user)(objectCategory=group)(objectCategory=computer))'
+    flt = (
+        '(|(objectCategory=user)'
+        '(objectCategory=group)'
+        '(objectCategory=computer))'
+    )
     attrs = ['distinguishedName', 'memberOf']
     kwargs = _get_paged_kwargs(ldap_client, base_dn, page_size, query_limit)
     count = 0
@@ -416,7 +551,10 @@ def process_group(
     seen: set,
     writer: Optional[csv.writer] = None,
 ) -> List[List[str]]:
-    """Build group membership for a specified group; stream to CSV if writer is provided."""
+    """Build group membership for a specified group.
+
+    Stream to CSV if writer is provided.
+    """
     rows: List[List[str]] = []
 
     def emit(r: List[str]) -> None:
@@ -425,7 +563,11 @@ def process_group(
         else:
             rows.append(r)
 
-    group_name = groups_dictionary[group_dn].sam_account_name if base_name is None else base_name
+    group_name = (
+        groups_dictionary[group_dn].sam_account_name
+        if base_name is None
+        else base_name
+    )
 
     if not groups_dictionary[group_dn].members:
         emit([group_name, '', '', group_dn])
@@ -433,35 +575,66 @@ def process_group(
     for member in groups_dictionary[group_dn].members:
         if member in users_dictionary:
             u = users_dictionary[member]
-            emit([group_name, u.sam_account_name, u.get_account_flags(), group_dn])
+            emit([
+                group_name,
+                u.sam_account_name,
+                u.get_account_flags(),
+                group_dn
+            ])
         elif member in computers_dictionary:
-            emit([group_name, computers_dictionary[member].sam_account_name, '', group_dn])
+            emit([
+                group_name,
+                computers_dictionary[member].sam_account_name,
+                '',
+                group_dn
+            ])
         elif member in groups_dictionary:
             if not expand_nested or (expand_nested and base_name is None):
-                emit([group_name, groups_dictionary[member].sam_account_name, '', group_dn])
+                emit(
+                    [
+                        group_name,
+                        groups_dictionary[member].sam_account_name,
+                        '',
+                        group_dn
+                    ])
             if expand_nested and member not in seen:
                 seen.add(member)
                 nested = process_group(
-                    users_dictionary, groups_dictionary, computers_dictionary, member,
-                    True, group_name, seen, writer
-                )
+                    users_dictionary,
+                    groups_dictionary,
+                    computers_dictionary,
+                    member,
+                    True,
+                    group_name,
+                    seen,
+                    writer)
                 if not writer:
                     rows += nested
         else:
-            display = member.split(',')[0].replace('CN=', '').replace('cn=', '') if 'CN=' in member.upper() else member
+            display = member.split(',')[0].replace('CN=', '').replace(
+                'cn=', '') if 'CN=' in member.upper() else member
             emit([group_name, display, '', group_dn])
 
     return rows
 
 
-async def ldap_queries(ldap_client, base_dn: str, expand_nested: bool, query_limit: int, args) -> None:
-    """Run user/group/computer queries, stream output CSVs, and expand memberships."""
+async def ldap_queries(
+        ldap_client,
+        base_dn: str,
+        expand_nested: bool,
+        query_limit: int,
+        args) -> None:
+    """Run user/group/computer queries.
+
+    Stream output CSVs and expand memberships.
+    """
     users_dictionary: Dict[str, ADUser] = {}
     groups_dictionary: Dict[str, ADGroup] = {}
     computers_dictionary: Dict[str, ADComputer] = {}
     group_id_to_dn: Dict[str, str] = {}
 
-    # Safe path: msldap get_all_* return async generators; use custom paged search for consistency.
+    # Safe path: msldap get_all_* return async generators; use custom paged
+    # search for consistency.
     use_builtin = False
     print('[i] Using custom LDAP filters for enumeration')
 
@@ -473,7 +646,11 @@ async def ldap_queries(ldap_client, base_dn: str, expand_nested: bool, query_lim
         'userPassword', 'objectSid', 'distinguishedName'
     ]
     group_filter = '(objectcategory=group)'
-    group_attrs = ['sAMAccountName', 'member', 'primaryGroupToken', 'distinguishedName']
+    group_attrs = [
+        'sAMAccountName',
+        'member',
+        'primaryGroupToken',
+        'distinguishedName']
     computer_filter = '(objectcategory=computer)'
     comp_attrs = [
         'sAMAccountName', 'primaryGroupID', 'operatingSystem',
@@ -483,8 +660,11 @@ async def ldap_queries(ldap_client, base_dn: str, expand_nested: bool, query_lim
     ]
 
     # Non-AD testing servers
-    if ('forumsys.com' in str(base_dn).lower() or getattr(args, 'target_host', '') == 'ldap.forumsys.com'):
-        print('[i] Detected test LDAP server, using standard LDAP filters instead of AD-specific ones')
+    if ('forumsys.com' in str(base_dn).lower() or getattr(
+            args, 'target_host', '') == 'ldap.forumsys.com'):
+        print(
+            '[i] Detected test LDAP server, using standard LDAP filters '
+            'instead of AD-specific ones')
         user_filter = '(objectclass=inetOrgPerson)'
         user_attrs = ['uid', 'cn', 'sn', 'mail', 'distinguishedName']
         group_filter = '(objectclass=groupOfUniqueNames)'
@@ -507,8 +687,15 @@ async def ldap_queries(ldap_client, base_dn: str, expand_nested: bool, query_lim
     print('[-] Querying groups...')
     try:
         groups = await query_ldap_with_paging(
-            ldap_client, base_dn, group_filter, group_attrs, query_limit, ADGroup,
-            page_size=args.page_size, delay=args.delay, jitter=args.jitter
+            ldap_client,
+            base_dn,
+            group_filter,
+            group_attrs,
+            query_limit,
+            ADGroup,
+            page_size=args.page_size,
+            delay=args.delay,
+            jitter=args.jitter
         )
         print(f'[i] Found {len(groups)} groups')
     except Exception as e:
@@ -518,8 +705,15 @@ async def ldap_queries(ldap_client, base_dn: str, expand_nested: bool, query_lim
     print('[-] Querying computers...')
     try:
         computers = await query_ldap_with_paging(
-            ldap_client, base_dn, computer_filter, comp_attrs, query_limit, ADComputer,
-            page_size=args.page_size, delay=args.delay, jitter=args.jitter
+            ldap_client,
+            base_dn,
+            computer_filter,
+            comp_attrs,
+            query_limit,
+            ADComputer,
+            page_size=args.page_size,
+            delay=args.delay,
+            jitter=args.jitter
         )
         print(f'[i] Found {len(computers)} computers')
     except Exception as e:
@@ -538,7 +732,12 @@ async def ldap_queries(ldap_client, base_dn: str, expand_nested: bool, query_lim
 
     # Build membership index once (memberOf backlinks inverted)
     try:
-        membership_index = await build_membership_index(ldap_client, base_dn, args.query_limit, args.page_size)
+        membership_index = await build_membership_index(
+            ldap_client,
+            base_dn,
+            args.query_limit,
+            args.page_size
+        )
     except Exception as e:
         print(f'[!] Could not build membership index: {e}')
         membership_index = {}
@@ -557,59 +756,123 @@ async def ldap_queries(ldap_client, base_dn: str, expand_nested: bool, query_lim
 
     with open(group_csv, 'w', encoding='utf-8', newline='') as f_groups:
         print(f'[-] Writing membership information to "{f_groups.name}"...')
-        group_writer = csv.writer(f_groups, delimiter=',', quoting=csv.QUOTE_MINIMAL)
-        group_writer.writerow(['Group Name', 'Member SAM Account Name', 'Member Status', 'Group Distinguished Name'])
+        group_writer = csv.writer(
+            f_groups,
+            delimiter=',',
+            quoting=csv.QUOTE_MINIMAL)
+        group_writer.writerow(['Group Name',
+                               'Member SAM Account Name',
+                               'Member Status',
+                               'Group Distinguished Name'])
 
         with open(user_csv, 'w', encoding='utf-8', newline='') as f_users:
-            print(f'[-] Writing domain user information to "{f_users.name}"...')
-            user_writer = csv.writer(f_users, delimiter=',', quoting=csv.QUOTE_MINIMAL)
-            user_writer.writerow([
-                'SAM Account Name', 'Status', 'Locked Out', 'User Password',
-                'Display Name', 'Email', 'Home Directory', 'Profile Path',
-                'Logon Script Path', 'Password Last Set', 'Last Logon',
-                'User Comment', 'Description', 'Object SID', 'Distinguished Name'
-            ])
+            print(
+                f'[-] Writing domain user information to "{f_users.name}"...')
+            user_writer = csv.writer(
+                f_users, delimiter=',', quoting=csv.QUOTE_MINIMAL)
+            user_writer.writerow(['SAM Account Name',
+                                  'Status',
+                                  'Locked Out',
+                                  'User Password',
+                                  'Display Name',
+                                  'Email',
+                                  'Home Directory',
+                                  'Profile Path',
+                                  'Logon Script Path',
+                                  'Password Last Set',
+                                  'Last Logon',
+                                  'User Comment',
+                                  'Description',
+                                  'Object SID',
+                                  'Distinguished Name'])
 
             for u in users_dictionary.values():
-                gid = str(u.primary_group_id) if u.primary_group_id is not None else None
+                gid = (
+                    str(u.primary_group_id)
+                    if u.primary_group_id is not None
+                    else None
+                )
                 if gid and gid in group_id_to_dn:
                     grp_dn = group_id_to_dn[gid]
-                    group_writer.writerow([groups_dictionary[grp_dn].sam_account_name, u.sam_account_name, u.get_account_flags(), grp_dn])
+                    group_writer.writerow(
+                        [
+                            groups_dictionary[grp_dn].sam_account_name,
+                            u.sam_account_name,
+                            u.get_account_flags(),
+                            grp_dn])
 
-                user_writer.writerow([
-                    u.sam_account_name, u.get_account_flags(), u.locked_out, u.user_password, u.display_name,
-                    u.mail, u.home_directory, u.profile_path, u.logon_script, u.get_password_last_set_date(),
-                    u.get_last_logon_date(), u.comment, u.description, u.object_sid, u.distinguished_name
-                ])
+                user_writer.writerow([u.sam_account_name,
+                                      u.get_account_flags(),
+                                      u.locked_out,
+                                      u.user_password,
+                                      u.display_name,
+                                      u.mail,
+                                      u.home_directory,
+                                      u.profile_path,
+                                      u.logon_script,
+                                      u.get_password_last_set_date(),
+                                      u.get_last_logon_date(),
+                                      u.comment,
+                                      u.description,
+                                      u.object_sid,
+                                      u.distinguished_name])
 
         with open(comp_csv, 'w', encoding='utf-8', newline='') as f_comps:
-            print(f'[-] Writing domain computer information to "{f_comps.name}"...')
-            comp_writer = csv.writer(f_comps, delimiter=',', quoting=csv.QUOTE_MINIMAL)
+            print(
+                f'[-] Writing domain computer information to '
+                f'"{f_comps.name}"...')
+            comp_writer = csv.writer(
+                f_comps, delimiter=',', quoting=csv.QUOTE_MINIMAL)
             comp_writer.writerow([
                 'SAM Account Name', 'Primary Group ID', 'OS', 'OS Hotfix',
                 'OS Service Pack', 'OS Version', 'SQL SPNs', 'RA SPNS',
                 'Share SPNs', 'Mail SPNs', 'Auth SPNs', 'Backup SPNs',
-                'Management SPNs', 'Other SPNs', 'Last Logon', 'Password Last Set',
+                'Management SPNs', 'Other SPNs', 'Last Logon',
+                'Password Last Set',
                 'Object SID', 'Distinguished Name'
             ])
 
             for c in computers_dictionary.values():
                 spn_buckets = parse_spns(c.service_principal_names)
                 spn_cols = [','.join(map(str, b)) for b in spn_buckets]
-                comp_writer.writerow([
-                    c.sam_account_name, c.primary_group_id, c.operating_system, c.operating_system_hotfix,
-                    c.operating_system_service_pack, c.operating_system_version, *spn_cols,
-                    c.get_last_logon_date(), c.get_password_last_set_date(), c.object_sid, c.distinguished_name
-                ])
+                comp_writer.writerow([c.sam_account_name,
+                                      c.primary_group_id,
+                                      c.operating_system,
+                                      c.operating_system_hotfix,
+                                      c.operating_system_service_pack,
+                                      c.operating_system_version,
+                                      *spn_cols,
+                                      c.get_last_logon_date(),
+                                      c.get_password_last_set_date(),
+                                      c.object_sid,
+                                      c.distinguished_name])
 
-                gid = str(c.primary_group_id) if c.primary_group_id is not None else None
+                gid = (
+                    str(c.primary_group_id)
+                    if c.primary_group_id is not None
+                    else None
+                )
                 if gid and gid in group_id_to_dn:
                     grp_dn = group_id_to_dn[gid]
-                    group_writer.writerow([groups_dictionary[grp_dn].sam_account_name, c.sam_account_name, '', grp_dn])
+                    group_writer.writerow(
+                        [
+                            groups_dictionary[grp_dn].sam_account_name,
+                            c.sam_account_name,
+                            '',
+                            grp_dn
+                        ])
 
         print('[-] Building group membership (streamed)...')
         for idx, grp_dn in enumerate(list(groups_dictionary.keys()), 1):
-            _ = process_group(users_dictionary, groups_dictionary, computers_dictionary, grp_dn, expand_nested, None, set(), group_writer)
+            _ = process_group(
+                users_dictionary,
+                groups_dictionary,
+                computers_dictionary,
+                grp_dn,
+                expand_nested,
+                None,
+                set(),
+                group_writer)
             if idx % 1000 == 0:
                 print(f'[-] Processed {idx} groups...')
         print('[-] Done')
@@ -618,23 +881,47 @@ async def ldap_queries(ldap_client, base_dn: str, expand_nested: bool, query_lim
 # ---------- Main ----------
 
 async def main():
-    parser = argparse.ArgumentParser(description='Active Directory LDAP Enumerator')
+    parser = argparse.ArgumentParser(
+        description='Active Directory LDAP Enumerator')
 
     # Preferred identity: TARGET (Impacket-style)
-    parser.add_argument('target', nargs='?', help='TARGET: domain.tld/username[:password]@OptionalDCFQDNOrIP')
+    parser.add_argument(
+        'target',
+        nargs='?',
+        help='TARGET: domain.tld/username[:password]@OptionalDCFQDNOrIP')
 
     # Alternative identity (mutually exclusive with TARGET): DN simple bind
-    parser.add_argument('-dn', '--distinguished-name', dest='distinguished_name',
-                        help='Distinguished name for simple bind (mutually exclusive with TARGET)')
-    parser.add_argument('-p', '--password', help='Password (used if not present in TARGET or for -dn)')
+    parser.add_argument(
+        '-dn',
+        '--distinguished-name',
+        dest='distinguished_name',
+        help=(
+            'Distinguished name for simple bind '
+            '(mutually exclusive with TARGET)'))
+    parser.add_argument(
+        '-p',
+        '--password',
+        help='Password (used if not present in TARGET or for -dn)')
 
     # Auth switches (secretsdump style) — only with TARGET
-    parser.add_argument('-no-pass', dest='no_pass', action='store_true',
-                        help="Don't prompt for password (NTLM or Kerberos with ccache)")
-    parser.add_argument('-hashes', metavar='LMHASH:NTHASH',
-                        help='LM:NT hash. With -k, NT is used as RC4 key for Kerberos; else NTLM PtH.')
-    parser.add_argument('-k', dest='use_kerberos', action='store_true',
-                        help='Use Kerberos authentication (uses KRB5CCNAME if available; else falls back to password if provided).')
+    parser.add_argument(
+        '-no-pass',
+        dest='no_pass',
+        action='store_true',
+        help="Don't prompt for password (NTLM or Kerberos with ccache)")
+    parser.add_argument(
+        '-hashes',
+        metavar='LMHASH:NTHASH',
+        help=(
+            'LM:NT hash. With -k, NT is used as RC4 key for Kerberos; '
+            'else NTLM PtH.'))
+    parser.add_argument(
+        '-k',
+        dest='use_kerberos',
+        action='store_true',
+        help=(
+            'Use Kerberos authentication (uses KRB5CCNAME if available; '
+            'else falls back to password if provided).'))
     parser.add_argument('-aesKey', dest='aes_key', metavar='HEX',
                         help='AES key for Kerberos (128 or 256 bits).')
 
@@ -642,33 +929,70 @@ async def main():
     parser.add_argument('--method', choices=['ldap', 'ldaps'], default='ldap',
                         help='Connection method: ldap (389) or ldaps (636)')
     parser.add_argument('--port', type=int, help='Custom TCP port')
-    parser.add_argument('--channel-binding', dest='channel_binding',
-                        choices=['none', 'tls-server-end-point', 'tls-unique'],
-                        default='tls-server-end-point',
-                        help='Channel binding for secure connections (ldaps only)')
+    parser.add_argument(
+        '--channel-binding',
+        dest='channel_binding',
+        choices=[
+            'none',
+            'tls-server-end-point',
+            'tls-unique'],
+        default='tls-server-end-point',
+        help='Channel binding for secure connections (ldaps only)')
 
     # DC/host handling
-    parser.add_argument('-dc-ip', dest='dc_ip', help='Domain Controller IP address (alternative to @DCFQDN in TARGET; required with -dn)')
+    parser.add_argument(
+        '-dc-ip',
+        dest='dc_ip',
+        help=(
+            'Domain Controller IP address (alternative to @DCFQDN in TARGET; '
+            'required with -dn)'))
 
     # Search / output
-    parser.add_argument('-ql', '--query_limit', type=int, default=30, help='Search time limit in seconds')
-    parser.add_argument('--debug', action='store_true', help='Enable debug logging')
-    parser.add_argument('-x', '--excel', action='store_true', help='Output Excel file with all worksheets')
-    parser.add_argument('-o', '--prepend', dest='filename_prepend', default='ad-ldap-enum_',
-                        help='Prepend string to output filenames (default: ad-ldap-enum_)')
+    parser.add_argument(
+        '-ql',
+        '--query_limit',
+        type=int,
+        default=30,
+        help='Search time limit in seconds')
+    parser.add_argument(
+        '--debug',
+        action='store_true',
+        help='Enable debug logging')
+    parser.add_argument(
+        '-x',
+        '--excel',
+        action='store_true',
+        help='Output Excel file with all worksheets')
+    parser.add_argument(
+        '-o',
+        '--prepend',
+        dest='filename_prepend',
+        default='ad-ldap-enum_',
+        help='Prepend string to output filenames (default: ad-ldap-enum_)')
 
     # OPSEC
     opsec = parser.add_argument_group('OPSEC')
-    opsec.add_argument('--delay', type=float, default=0.0, help='Delay in seconds between LDAP pages')
-    opsec.add_argument('--jitter', type=float, default=0.0, help='Random jitter percentage (0.0-1.0)')
+    opsec.add_argument('--delay', type=float, default=0.0,
+                       help='Delay in seconds between LDAP pages')
+    opsec.add_argument('--jitter', type=float, default=0.0,
+                       help='Random jitter percentage (0.0-1.0)')
     opsec.add_argument('--page-size', type=int, default=DEFAULT_PAGE_SIZE,
                        help='LDAP page size (1–1000; AD MaxPageSize is 1000)')
 
     # Scope
-    parser.add_argument('-a', '--alt-domain', dest='alt_domain',
-                        help='Alternative Base DN domain (e.g., corp.local). Required with -dn.')
-    parser.add_argument('-e', '--nested', dest='nested_groups', action='store_true',
-                        help='Expand nested groups')
+    parser.add_argument(
+        '-a',
+        '--alt-domain',
+        dest='alt_domain',
+        help=(
+            'Alternative Base DN domain (e.g., corp.local). Required with -dn.'
+        ))
+    parser.add_argument(
+        '-e',
+        '--nested',
+        dest='nested_groups',
+        action='store_true',
+        help='Expand nested groups')
 
     args = parser.parse_args()
 
@@ -678,7 +1002,9 @@ async def main():
     except Exception:
         requested_ps = DEFAULT_PAGE_SIZE
     if requested_ps > MAX_AD_PAGE_SIZE:
-        print(f'[!] Requested --page-size {requested_ps} exceeds AD MaxPageSize {MAX_AD_PAGE_SIZE}; forcing {MAX_AD_PAGE_SIZE}.')
+        print(
+            f'[!] Requested --page-size {requested_ps} exceeds AD MaxPageSize '
+            f'{MAX_AD_PAGE_SIZE}; forcing {MAX_AD_PAGE_SIZE}.')
     elif requested_ps < 1:
         print(f'[!] Requested --page-size {requested_ps} is < 1; forcing 1.')
     args.page_size = clamp_page_size(requested_ps)
@@ -693,11 +1019,15 @@ async def main():
     # If -dn is used, forbid auth flags and require -dc-ip, -a, and -p
     if args.distinguished_name:
         if any([args.no_pass, args.hashes, args.use_kerberos, args.aes_key]):
-            parser.error('Auth flags (-no-pass, -hashes, -k, -aesKey) are not valid with -dn.')
+            parser.error(
+                'Auth flags (-no-pass, -hashes, -k, -aesKey) '
+                'are not valid with -dn.')
         if not args.dc_ip:
             parser.error('-dc-ip is required with -dn (no @host accepted).')
         if not args.alt_domain:
-            parser.error('-a/--alt-domain is required with -dn to form Base DN (e.g., corp.local).')
+            parser.error(
+                '-a/--alt-domain is required with -dn to form Base DN '
+                '(e.g., corp.local).')
         if not args.password:
             parser.error('-p/--password is required with -dn.')
 
@@ -718,7 +1048,8 @@ async def main():
             logging.Formatter.converter = gmtime
         except Exception as e:
             print(f'[!] Warning: Could not initialize log file: {e}')
-    logging.getLogger('msldap').setLevel(logging.DEBUG if args.debug else logging.WARNING)
+    logging.getLogger('msldap').setLevel(
+        logging.DEBUG if args.debug else logging.WARNING)
 
     # Build identity / host selection
     target_host = None
@@ -736,7 +1067,9 @@ async def main():
     else:
         # TARGET path
         try:
-            domain, username, inline_password, provided_host = parse_impacket_target(args.target)
+            domain, username, inline_password, provided_host = (
+                parse_impacket_target(args.target)
+            )
         except Exception as e:
             parser.error(str(e))
 
@@ -775,7 +1108,9 @@ async def main():
         print(f'[i] Channel binding requested: {args.channel_binding}')
         channel_binding_info = args.channel_binding
     elif args.channel_binding != 'none' and args.method != 'ldaps':
-        print('[!] Warning: Channel binding requires --method ldaps. Ignoring channel binding.')
+        print(
+            '[!] Warning: Channel binding requires --method ldaps. '
+            'Ignoring channel binding.')
 
     # Build msldap URL
     from urllib.parse import quote
@@ -787,38 +1122,63 @@ async def main():
         pw = inline_password or args.password
         if args.use_kerberos:
             if is_ip_address(target_host):
-                print('[!] Warning: Kerberos to an IP may fail due to SPN mismatch; prefer @dc.fqdn and use -dc-ip for KDC IP.')
+                print(
+                    '[!] Warning: Kerberos to an IP may fail due to SPN '
+                    'mismatch; prefer @dc.fqdn and use -dc-ip for KDC IP.')
             if not dc_ip:
                 print('[!] Could not determine DC IP; Kerberos may fail.')
             if args.aes_key:
-                url = f"{protocol}+kerberos-aes://{domain}\\{username}:{quote(args.aes_key, safe='')}@{target_host}:{port}/?dc={dc_ip}"
+                url = (
+                    f"{protocol}+kerberos-aes://{domain}\\{username}:"
+                    f"{quote(args.aes_key, safe='')}@{target_host}:{port}/"
+                    f"?dc={dc_ip}"
+                )
             elif args.hashes:
                 try:
                     _, nt = args.hashes.split(':', 1)
                 except ValueError:
                     parser.error('-hashes must be LMHASH:NTHASH')
-                url = f"{protocol}+kerberos-nt://{domain}\\{username}:{quote(nt, safe='')}@{target_host}:{port}/?dc={dc_ip}"
+                url = (
+                    f"{protocol}+kerberos-nt://{domain}\\{username}:"
+                    f"{quote(nt, safe='')}@{target_host}:{port}/?dc={dc_ip}"
+                )
             elif pw:
-                url = f"{protocol}+kerberos-password://{domain}\\{username}:{quote(pw, safe='')}@{target_host}:{port}/?dc={dc_ip}"
+                url = (
+                    f"{protocol}+kerberos-password://{domain}\\{username}:"
+                    f"{quote(pw, safe='')}@{target_host}:{port}/?dc={dc_ip}"
+                )
             else:
-                url = f"{protocol}+kerberos-ccache://{domain}\\{username}@{target_host}:{port}/?dc={dc_ip}"
+                url = (
+                    f"{protocol}+kerberos-ccache://{domain}\\{username}"
+                    f"@{target_host}:{port}/?dc={dc_ip}"
+                )
         else:
             if args.hashes:
                 try:
                     _, nt = args.hashes.split(':', 1)
                 except ValueError:
                     parser.error('-hashes must be LMHASH:NTHASH')
-                url = f"{protocol}+ntlm-nt://{domain}\\{username}:{quote(nt, safe='')}@{target_host}:{port}"
+                url = (
+                    f"{protocol}+ntlm-nt://{domain}\\{username}:"
+                    f"{quote(nt, safe='')}@{target_host}:{port}"
+                )
             else:
                 if pw is None:
                     if args.no_pass:
                         pw = ''
                     else:
-                        parser.error('NTLM requires a password (in TARGET or -p) or -no-pass.')
-                url = f"{protocol}+ntlm-password://{domain}\\{username}:{quote(pw, safe='')}@{target_host}:{port}"
+                        parser.error(
+                            'NTLM requires a password (in TARGET or -p) '
+                            'or -no-pass.')
+                url = (
+                    f"{protocol}+ntlm-password://{domain}\\{username}:"
+                    f"{quote(pw, safe='')}@{target_host}:{port}"
+                )
 
     if protocol == 'ldaps' and is_ip_address(target_host):
-        print('[!] LDAPS to an IP can fail certificate checks/SNI. Prefer @dc.fqdn with -dc-ip for KDC IP.')
+        print(
+            '[!] LDAPS to an IP can fail certificate checks/SNI. '
+            'Prefer @dc.fqdn with -dc-ip for KDC IP.')
 
     # Save for downstream logic
     args.target_host = target_host
@@ -829,13 +1189,17 @@ async def main():
 
     print(f'[-] Connecting to LDAP server at "{target_host}:{port}"...')
     if args.debug:
-        print(f'[DEBUG] URL scheme selected: {url.split("://",1)[0]}://... (dc_ip={dc_ip})')
+        print(
+            f'[DEBUG] URL scheme selected: '
+            f'{url.split("://", 1)[0]}://... (dc_ip={dc_ip})')
 
     factory = LDAPConnectionFactory.from_url(url)
     ldap_client = factory.get_client()
 
     if channel_binding_info:
-        print('[i] Channel binding framework ready - awaiting msldap library support')
+        print(
+            '[i] Channel binding framework ready - awaiting '
+            'msldap library support')
 
     try:
         await ldap_client.connect()
@@ -847,11 +1211,15 @@ async def main():
     # Verify bind/search
     try:
         whoami = await ldap_client.whoami()
-        print(f'[i] Authenticated as: {whoami}' if whoami else '[i] Authentication successful (anonymous or limited info)')
+        print(
+            f'[i] Authenticated as: {whoami}'
+            if whoami
+            else '[i] Authentication successful (anonymous or limited info)')
     except Exception as e:
         print(f'[!] Authentication verification failed: {e}')
     try:
-        async for entry, err in ldap_client.pagedsearch('(objectClass=*)', ['objectClass'], tree=base_dn):
+        async for entry, err in ldap_client.pagedsearch(
+                '(objectClass=*)', ['objectClass'], tree=base_dn):
             if entry or err:
                 break
         print('[i] LDAP search capability confirmed')
@@ -864,7 +1232,13 @@ async def main():
 
     # Enumeration
     try:
-        await ldap_queries(ldap_client, base_dn, args.nested_groups, args.query_limit, args)
+        await ldap_queries(
+            ldap_client,
+            base_dn,
+            args.nested_groups,
+            args.query_limit,
+            args
+        )
     except Exception as e:
         print(f'[e] Query error: {e}')
         logging.error(traceback.format_exc())
@@ -876,14 +1250,22 @@ async def main():
 
     # Excel export (CSV → XLSX)
     if args.excel:
-        csv_to_excel(f'{args.filename_prepend}{USER_CSV}.csv',
-                     f'{args.filename_prepend}Users_Groups_Computers.xlsx', 'Users')
-        csv_to_excel(f'{args.filename_prepend}{GROUP_CSV}.csv',
-                     f'{args.filename_prepend}Users_Groups_Computers.xlsx', 'Groups')
-        csv_to_excel(f'{args.filename_prepend}{COMP_CSV}.csv',
-                     f'{args.filename_prepend}Users_Groups_Computers.xlsx', 'Computers')
+        csv_to_excel(
+            f'{args.filename_prepend}{USER_CSV}.csv',
+            f'{args.filename_prepend}Users_Groups_Computers.xlsx',
+            'Users')
+        csv_to_excel(
+            f'{args.filename_prepend}{GROUP_CSV}.csv',
+            f'{args.filename_prepend}Users_Groups_Computers.xlsx',
+            'Groups')
+        csv_to_excel(
+            f'{args.filename_prepend}{COMP_CSV}.csv',
+            f'{args.filename_prepend}Users_Groups_Computers.xlsx',
+            'Computers')
 
-    print('\n[i] Enumeration completed. Review output files for sensitive data before sharing.')
+    print(
+        '\n[i] Enumeration completed. Review output files for sensitive '
+        'data before sharing.')
 
 
 def csv_to_excel(csv_file: str, excel_file: str, sheet_name: str) -> None:
