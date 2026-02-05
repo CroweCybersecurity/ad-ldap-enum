@@ -1,26 +1,5 @@
 #!/usr/bin/env python
 
-"""An LDAP Active Directory enumerator.
-
-Required TARGET (Impacket-secretsdump style):
-  domain.tld/username[:password]@OptionalDCFQDNOrIP
-
-Auth options (secretsdump-style) — only with TARGET:
-  -no-pass                 -> don't prompt for password (NTLM or Kerberos+ccache)
-  -hashes LMHASH:NTHASH    -> with -k use NTHASH as RC4 key (Kerberos); else NTLM PtH
-  -k                       -> Kerberos (uses KRB5CCNAME if available; else password Kerberos if provided)
-  -aesKey HEX              -> Kerberos AES (128/256)
-
-Alternative identity (mutually exclusive with TARGET):
-  -dn "Distinguished Name" + -p password + -a domain.tld + -dc-ip IP
-    (simple bind; no Kerberos/NTLM flags)
-
-New:
-  -dc-ip IP                -> DC IP address (alternative to @DCFQDN in TARGET; required with -dn)
-                              We collect DC FQDN (from TARGET when present) and DC IP (from -dc-ip or DNS).
-                              Kerberos URLs use ?dc=IP; connection host prefers FQDN if available.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -319,7 +298,7 @@ class ADGroup:
 
 def _get_paged_kwargs(ldap_client, base_dn: str, page_size: int, query_limit: int) -> Dict[str, Any]:
     """Build kwargs for pagedsearch tolerating msldap signature differences."""
-    kwargs: Dict[str, Any] = {'tree': base_dn, 'search_scope': 2}
+    kwargs: Dict[str, Any] = {'tree': base_dn}
     page_size = clamp_page_size(page_size)
     try:
         sig = inspect.signature(ldap_client.pagedsearch)
@@ -872,7 +851,7 @@ async def main():
     except Exception as e:
         print(f'[!] Authentication verification failed: {e}')
     try:
-        async for entry, err in ldap_client.pagedsearch('(objectClass=*)', ['objectClass'], tree=base_dn, search_scope=2):
+        async for entry, err in ldap_client.pagedsearch('(objectClass=*)', ['objectClass'], tree=base_dn):
             if entry or err:
                 break
         print('[i] LDAP search capability confirmed')
