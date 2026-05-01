@@ -9,18 +9,27 @@ ad-ldap-enum is a Python script developed to collect users/computers and their g
 - `Extended_Domain_Computer_Information.csv`
 - Optional: a single Excel workbook when `-x/--excel` is used
 
-## Requirements
+## Installation
 
-This tool has been built and tested with Python 3.10+ on Windows and Linux. It uses the [msldap](https://github.com/skelsec/msldap) Python package for LDAP connections and queries. To install the requirements, run:
+This tool has been built and tested with Python 3.10+ on Windows and Linux. It uses the [msldap](https://github.com/skelsec/msldap) Python package for LDAP connections and queries.
+
+Install as a CLI with `uv`:
 
 ```bash
-python -m pip install -r requirements.txt
+uv tool install .
+ad-ldap-enum --help
+```
+
+From a source checkout, run the same dashed tool name:
+
+```bash
+python ad-ldap-enum.py --help
 ```
 
 ## Usage
 
 ```cmd
-usage: ad-ldap-enum.py [-h] (-n | -u USERNAME | -dn DISTINGUISHED_NAME) [-k] [-p PASSWORD] [-P] [--ccache CCACHE_FILE] 
+usage: ad-ldap-enum [-h] (-n | -u USERNAME | -dn DISTINGUISHED_NAME) [-k] [-p PASSWORD] [-P] [--ccache CCACHE_FILE] 
                        [--kirbi KIRBI_FILE] [--method {ldap,ldaps}] [--channel-binding {none,tls-server-end-point,tls-unique}] 
                        [-t TIMEOUT] [-ql QUERY_LIMIT] [--debug] [--legacy] 
                        [-x] [-o FILENAME_PREPEND] [--delay DELAY] [--jitter JITTER] [--page-size PAGE_SIZE] 
@@ -78,19 +87,19 @@ Quick examples:
 
 ```bash
 # NTLM with inline password
-python ad-ldap-enum.py domain.tld/username:Password123!@dc.domain.tld
+ad-ldap-enum domain.tld/username:Password123!@dc.domain.tld
 
 # NTLM with password prompt (omit password, do not use -no-pass)
-python ad-ldap-enum.py domain.tld/username@dc.domain.tld -p 'Password123!'
+ad-ldap-enum domain.tld/username@dc.domain.tld -p 'Password123!'
 
 # Kerberos with password
-python ad-ldap-enum.py domain.tld/username:Password123!@dc.domain.tld -k
+ad-ldap-enum domain.tld/username:Password123!@dc.domain.tld -k
 
 # Kerberos with NT hash (LM:NT)
-python ad-ldap-enum.py domain.tld/username@dc.domain.tld -k -hashes aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0
+ad-ldap-enum domain.tld/username@dc.domain.tld -k -hashes aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0
 
 # LDAPS + channel binding
-python ad-ldap-enum.py domain.tld/username:Password123!@dc.domain.tld --method ldaps --channel-binding tls-server-end-point
+ad-ldap-enum domain.tld/username:Password123!@dc.domain.tld --method ldaps --channel-binding tls-server-end-point
 ```
 
 ## Version History
