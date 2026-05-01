@@ -11,19 +11,23 @@ ad-ldap-enum is a Python script developed to collect users/computers and their g
 
 ## Installation
 
-This tool has been built and tested with Python 3.10+ on Windows and Linux. It uses the [msldap](https://github.com/skelsec/msldap) Python package for LDAP connections and queries.
-
-Install as a CLI with `uv`:
+This tool has been built and tested with Python 3.10+ on Windows and Linux. It uses the [msldap](https://github.com/skelsec/msldap) Python package for LDAP connections and queries. To install ad-ldap-enum as a command line tool with [uv](https://docs.astral.sh/uv/):
 
 ```bash
-uv tool install .
+uv tool install git+https://github.com/CroweCybersecurity/ad-ldap-enum
+```
+
+After installation, run ad-ldap-enum with:
+
+```bash
 ad-ldap-enum --help
 ```
 
-From a source checkout, run the same dashed tool name:
+Alternatively to uv, you can install/upgrade the requirements with traditional pip:
 
 ```bash
-python ad-ldap-enum.py --help
+git clone https://github.com/CroweCybersecurity/ad-ldap-enum && cd ./ad-ldap-enum
+python -m pip install -r 'requirements.txt'
 ```
 
 ## Usage
